@@ -1,0 +1,2491 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lineage Imperative live view</title>
+<meta name="description" content="The Lineage Imperative v3 framework and the work running on it, live.">
+<style>
+:root { --bg:#05040b; --fg:#e6ecff; --muted:#9a9ab8; --line:#2a2740; --track:#2c2c2c; --run:#8ab4f8; }
+html, body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui, sans-serif; }
+body { padding:8px; box-sizing:border-box; }
+button { font:inherit; font-size:13px; padding:5px 12px; border-radius:8px; border:1px solid var(--line); background:#0e0c1c;
+  color:var(--fg); cursor:pointer; }
+
+.viz { flex:1 1 0; min-width:380px; max-width:1000px; position:sticky; top:16px; }
+.viz-bar { display:none; }
+.viz-bar button { display:flex; width:100%; align-items:center; justify-content:space-between; gap:10px; text-align:left; }
+#viz-mini { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.viz-tabs { display:flex; gap:6px; margin:0 0 8px; }
+.viz-tabs button { flex:1; font-size:13px; padding:5px 10px; border-radius:8px; }
+.viz-tabs button[aria-selected="true"] { border-color:var(--run); color:var(--run); font-weight:600; }
+.viz[data-tab="proc"] #fw-canvas, .viz[data-tab="proc"] #fw-pop { display:none; }
+.viz[data-tab="fw"] #viz-canvas, .viz[data-tab="fw"] #viz-pop { display:none; }
+.viz-screen { position:relative; height:calc(100vh - 72px); min-height:420px; border-radius:10px; overflow:hidden;
+  background:#05040b; border:1px solid var(--line); }
+.viz-screen canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+.viz-screen canvas.viz-trans { z-index:3; pointer-events:none; }
+.fw-ctl { position:absolute; right:10px; bottom:8px; z-index:2; display:flex; gap:6px; }
+.fw-ctl button { font:600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:#cfe8ff; background:rgba(10,8,24,0.82);
+  border:1px solid rgba(90,209,255,0.45); border-radius:8px; padding:5px 10px; cursor:pointer; }
+.fw-ctl .fw-z { display:none; min-width:34px; }
+.viz.fw3d .fw-ctl .fw-z { display:inline-block; }
+.viz[data-tab="proc"] #fw-ctl { display:none; }
+.viz-pop { position:absolute; z-index:2; box-sizing:border-box; width:max-content; max-width:min(330px, calc(100% - 16px)); background:rgba(9,8,22,0.95);
+  border:1px solid rgba(90,209,255,0.45); border-radius:8px; padding:10px 12px; color:#e6ecff;
+  font:12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; box-shadow:0 6px 24px rgba(0,0,0,0.55); }
+.viz-pop { opacity:0; visibility:hidden; pointer-events:none; transform:scale(0.84);
+  transition:opacity .16s ease, transform .2s cubic-bezier(.3,.7,.4,1), visibility 0s linear .2s; }
+.viz-pop.open { opacity:1; visibility:visible; pointer-events:auto; transform:none;
+  transition:opacity .16s ease, transform .24s cubic-bezier(.2,.9,.3,1.15), left .22s ease, top .22s ease, visibility 0s; }
+@media (prefers-reduced-motion: reduce) { .viz-pop, .viz-pop.open { transform:none;
+  transition:opacity .1s linear, visibility 0s linear .1s; } }
+.viz-x { position:absolute; top:3px; right:4px; border:none; background:none; color:#9fb3ff; font-size:17px; line-height:1;
+  padding:3px 7px; cursor:pointer; }
+.vp-t { color:#5ad1ff; font-weight:700; margin:0 24px 6px 0; }
+.vp-r { display:flex; gap:10px; margin:3px 0; } .vp-k { flex:none; width:112px; color:#8f96c0; }
+.vp-v { flex:1; min-width:120px; overflow-wrap:anywhere; }
+.vp-bar { display:block; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; margin-top:3px; overflow:hidden; }
+.vp-bar > span { display:block; height:100%; }
+.vp-h { color:#8f96c0; margin:8px 0 2px; } .vp-j { margin:5px 0 0; } .vp-n { color:#a9b0d6; margin:2px 0 0; overflow-wrap:anywhere; }
+.vp-warn { color:#f6bf60; font-weight:400; }
+.viz { position:relative; top:auto; width:100%; max-width:none; min-width:0; flex:none; }
+.viz-bar { display:none; }
+.viz-tabs { align-items:center; flex-wrap:wrap; }
+.viz-tabs button { flex:0 0 auto; min-width:120px; }
+.pub-note { margin-left:auto; color:var(--muted); font-size:12px; }
+.viz-screen { height:calc(100vh - 62px); min-height:380px; }
+@media (max-width:560px) { .pub-note { margin-left:0; width:100%; } .viz-screen { height:calc(100vh - 86px); } }
+</style></head><body>
+<aside class="viz" id="viz" data-tab="fw" aria-label="Processing and framework views">
+<div class="viz-bar"><button type="button" id="viz-toggle" aria-expanded="false" aria-controls="viz-screen">
+<span id="viz-toggle-label">&#9656; Processing view</span><span id="viz-mini"></span></button></div>
+<div class="viz-tabs" role="tablist"><button type="button" role="tab" id="tab-fw" aria-selected="true">Framework</button><button type="button" role="tab" id="tab-proc" aria-selected="false">Processing</button><span class="pub-note" id="pub-note">The v3 work as it happens, 10 minutes behind actual. Results awaiting review.</span></div>
+<div class="viz-screen" id="viz-screen"><canvas id="fw-canvas" role="img"
+ aria-label="The framework as a citadel: what is online, in progress and still to do; tap any part for details"></canvas>
+<div class="viz-pop" id="fw-pop" role="dialog" aria-live="polite"><button type="button" class="viz-x" id="fw-pop-x"
+ aria-label="Close">&times;</button><div id="fw-pop-body"></div></div>
+<div class="fw-ctl" id="fw-ctl"><button type="button" class="fw-z" id="fw-zoom-out" aria-label="Zoom out">&minus;</button><button
+ type="button" class="fw-z" id="fw-zoom-in" aria-label="Zoom in">+</button><button type="button" id="fw-mode"
+ aria-pressed="false">3D shells</button></div><canvas id="viz-canvas" role="img"
+ aria-label="Animated view of both machines and the jobs in flight; tap a machine, thread, model or job for details"></canvas>
+<div class="viz-pop" id="viz-pop" role="dialog" aria-live="polite"><button type="button" class="viz-x" id="viz-pop-x"
+ aria-label="Close">&times;</button><div id="viz-pop-body"></div></div></div>
+</aside>
+<script>var FEED = 'feed/';</script>
+<script>
+(function () {  // the time of the last update, so a stalled feed is visible to visitors
+  var el = document.getElementById("pub-note");
+  function show(t) {
+    var d = new Date(t * 1000), hm = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    var when = new Date().toDateString() === d.toDateString() ? hm : d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + hm;
+    var stale = Date.now() / 1000 - t > 2700;  // three missed updates, allowing for the host's caching
+    el.textContent = "The v3 work as it happens, 10 minutes behind actual" + (stale ? "; last update " + when + " (updates paused)"
+      : "; feed updated " + when) + ". Results awaiting review.";
+  }
+  function poll() {
+    fetch(FEED + "meta.json", { cache: "no-store" }).then(function (r) { return r.json(); })
+      .then(function (m) { if (m && m.built_epoch) show(m.built_epoch); }).catch(function () {});
+  }
+  poll();
+  setInterval(poll, 60000);
+})();
+</script>
+<script>
+(function () {
+  var wrap = document.getElementById("viz"), scr = document.getElementById("viz-screen");
+  var cv = document.getElementById("viz-canvas"), btn = document.getElementById("viz-toggle");
+  var lbl = document.getElementById("viz-toggle-label"), mini = document.getElementById("viz-mini");
+  if (!cv || !cv.getContext) return;
+  var ctx = cv.getContext("2d");
+  var KEY = "lineageVizOpen";
+  var reduce = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+  var C = { cyan: "90,209,255", mag: "196,110,255", amber: "246,191,96", red: "255,110,110",
+            green: "90,230,170", white: "230,236,255", grey: "130,130,165" };
+  var STATE_COL = { running: C.cyan, waiting: C.grey, "needs-you": C.amber, problem: C.red };
+  var MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+  var W = 0, H = 0, DPR = 1, TOP = 60, BOT = 80, FS = 11, raf = 0, last = 0, clock = 0, busy = false;
+  var data = null, hubs = { x2: hub("x2"), ws: hub("ws"), people: hub("people") }, clusters = {}, ambient = [], packets = [];
+  // The machines in the data, the X2 first: a hub each. The X2 is cyan and the workstation magenta; any other machine
+  // takes the next of its own colours, in the board's order.
+  var MK = ["x2", "ws"], mkSig = "", MCOL = { x2: C.cyan, ws: C.mag }, EXTRA_COL = ["150,175,255", "255,138,196", "196,232,120", "255,170,120"];
+  var P_RING = 1.8, P_KEEP = 2.15;  // the people hub: its reviewers' ring, and the room it keeps clear, in hub radii
+  var ticker = [], tickY = 0;
+  var pop = document.getElementById("viz-pop"), popBody = document.getElementById("viz-pop-body"), sel = null;
+  var models = { x2: { x: 0, y: 0, m: {} }, ws: { x: 0, y: 0, m: {} } };
+  // A small brain (24 by 24 units): the outline, and its fissure and folds.
+  var BRAIN = window.Path2D ? new Path2D("M12 4.5C10.8 3.2 8.6 3.3 7.6 4.8C5.6 4.6 4.2 6.2 4.6 8C3 8.8 2.6 11 3.6 12.3"
+    + "C2.6 13.8 3.2 16 5 16.6C5.4 18.6 7.6 19.6 9.4 18.8C10.2 19.9 11.4 20.1 12 19.5C12.6 20.1 13.8 19.9 14.6 18.8"
+    + "C16.4 19.6 18.6 18.6 19 16.6C20.8 16 21.4 13.8 20.4 12.3C21.4 11 21 8.8 19.4 8C19.8 6.2 18.4 4.6 16.4 4.8"
+    + "C15.4 3.3 13.2 3.2 12 4.5Z") : null;
+  var FOLDS = window.Path2D ? new Path2D("M12 4.5V19.5M7.6 4.8C8 6.2 9.6 6.8 10.6 6.2M4.6 8C5.8 8.9 7.4 8.6 8.4 9.8"
+    + "M3.6 12.3C5 12.9 6.6 12.3 7.6 13.4M5 16.6C6.4 16.6 7.8 15.8 8.2 14.8M16.4 4.8C16 6.2 14.4 6.8 13.4 6.2"
+    + "M19.4 8C18.2 8.9 16.6 8.6 15.6 9.8M20.4 12.3C19 12.9 17.4 12.3 16.4 13.4M19 16.6C17.6 16.6 16.2 15.8 15.8 14.8") : null;
+  var flows = [], sparks = [], ringSel = null, ringA = 0;
+  var stars = {}, starList = [], groupCenters = {}, grads = [], knownDone = null, budget = null, gauge = null;
+  var tlHits = [], links = {}, peopleTies = [];
+  function brainScale() { return Math.max(1.15, Math.min(1.6, FS / 8)); }
+  function modelKeys() { return Object.keys(models); }
+  function isMachine(k) { return k !== "people" && Object.prototype.hasOwnProperty.call(hubs, k); }
+  function mcol(k) { return MCOL[k] || C.mag; }
+  function tag(k) { return String(k).toUpperCase(); }
+  function mname(k) { return k === "x2" ? "the X2" : k === "ws" ? "the workstation" : (isMachine(k) && hubs[k].m.name) || k; }
+  function hubScale(k) {  // a hub's size by its thread count: the X2's 32 at full size, each halving 10% smaller
+    var m = (hubs[k] && hubs[k].m) || {}, n = k === "x2" ? 32 : k === "ws" ? 16 : m.nthreads || (m.threads || []).length || 16;
+    return Math.max(0.7, Math.min(1.1, 1 + 0.1 * Math.log2(n / 32)));
+  }
+  function isLocalX2(k) { return k.indexOf("x2-") === 0; }
+  function isCloud(k) { return !isMachine(k) && !isLocalX2(k); }
+  function notMachine(k) { return !isMachine(k); }
+  function hostHub(k) { return isMachine(k) ? hubs[k] : isLocalX2(k) ? hubs.x2 : null; }
+  function modelOn(k) { var st = models[k] && models[k].m && models[k].m.state; return st === "Up" || st === "Loading" || st === "Starting"; }
+  function modelR(k) { return 12 * brainScale() * ((models[k] && models[k].sc) || 1); }
+  var DOCK = 0.55, dockTop = null, lastOnSig = "", modelsShown = false;
+  function placeModels() {  // active models in their places; idle or stopped ones reduced in a dock at the bottom left
+    if (!W || !H) return;
+    var R = 12 * brainScale(), clouds = [], docked = [], extras = 0;
+    modelKeys().forEach(function (k) { if (!modelOn(k)) docked.push(k); else if (isCloud(k)) clouds.push(k); });
+    modelKeys().forEach(function (k) {
+      var mm = models[k];
+      if (!modelOn(k)) return;
+      if (isMachine(k)) { mm.tx = mm.hx; mm.ty = mm.hy; }
+      else if (isLocalX2(k)) {  // another model on the X2: beside the machine, stepping round from the standard one
+        var h = hubs.x2, D = h.r * 2.05 + 36, a = Math.PI * 0.22 - 0.42 * Math.PI * (++extras);
+        mm.tx = h.x + Math.cos(a) * D; mm.ty = h.y + Math.sin(a) * D;
+      } else {  // a cloud model: along the top, centred
+        var n = clouds.length, i = clouds.indexOf(k), step = Math.min(0.2, 0.7 / Math.max(1, n));
+        mm.tx = W * (0.5 + (i - (n - 1) / 2) * step); mm.ty = TOP + 26 + R;
+      }
+      mm.tsc = 1;
+    });
+    var Rd = R * DOCK, gap = Math.max(78, FS * 7.5), perRow = Math.max(1, Math.floor((W < 700 ? W * 0.9 : W * 0.42) / gap));
+    var rowH = 2 * Rd + 2 * FS + 10, base = H - BOT - 38 - Rd;
+    docked.forEach(function (k, i) {
+      var mm = models[k];
+      mm.tx = 16 + gap / 2 + (i % perRow) * gap; mm.ty = base - Math.floor(i / perRow) * rowH; mm.tsc = DOCK;
+    });
+    dockTop = docked.length ? base - Math.floor((docked.length - 1) / perRow) * rowH - Rd - 8 : null;
+    modelKeys().forEach(function (k) {
+      var mm = models[k];
+      if (!mm.placed) { mm.x = mm.tx; mm.y = mm.ty; mm.sc = mm.tsc; mm.placed = true; }
+    });
+  }
+
+  function hub(k) { return { key: k, x: 0, y: 0, r: 30, fan: 0, cpu: 0, mem: 0, threads: [], m: {}, fresh: true,
+                             rot: Math.random() * 6.28 }; }
+  function rgba(c, a) { return "rgba(" + c + "," + Math.max(0, Math.min(1, a)).toFixed(3) + ")"; }
+  function ease(a, b, k) { return a + (b - a) * k; }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function hhmm(epoch) {
+    var d = new Date(epoch * 1000), s = pad(d.getHours()) + ":" + pad(d.getMinutes());
+    if (d.toDateString() !== new Date(replayNow() * 1000).toDateString()) s = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][d.getDay()] + " " + s;
+    return s;
+  }
+  function num(n) { return Math.round(n).toLocaleString(); }
+  function trunc(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+  function line(x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+  function dot(x, y, r, fill) { ctx.fillStyle = fill; ctx.beginPath(); ctx.arc(x, y, Math.max(0.1, r), 0, 6.2832); ctx.fill(); }
+  function arc(x, y, r, a0, a1, stroke, w) {
+    ctx.strokeStyle = stroke; ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, r, a0, a1); ctx.stroke();
+  }
+  function text(s, x, y, col, size, align, weight) {
+    ctx.font = (weight || "500") + " " + size + "px " + MONO; ctx.textAlign = align || "left"; ctx.fillStyle = col;
+    ctx.fillText(s, x, y);
+  }
+
+  // ---- open and collapse: narrow screens only (wide screens always show it) ----
+  function stored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+  function setOpen(open, persist) {
+    wrap.classList.toggle("collapsed", !open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    lbl.textContent = (open ? "▾ " : "▸ ") + "Processing view";
+    if (persist) { try { localStorage.setItem(KEY, open ? "1" : "0"); } catch (e) {} }
+    if (!open) closePop();
+    resize(); kick();
+  }
+  btn.addEventListener("click", function () { setOpen(wrap.classList.contains("collapsed"), true); });
+  function shown() { return !document.hidden && cv.offsetWidth > 0 && cv.offsetHeight > 0; }
+
+  // ---- geometry ----
+  function resize() {
+    var w = scr.clientWidth, h = scr.clientHeight;
+    if (!w || !h) return;
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    if (w === W && h === H && cv.width === Math.round(w * DPR)) return;
+    W = w; H = h;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    layout(); seedAmbient();
+  }
+  // Each machine's place, as fractions of the width and of the band between the readouts and the strips, and the way
+  // its work fans out; the last entry is the people hub's. Two machines as they always were; with more, the X2 is the
+  // centre of a star and the others spread round it, keeping the bottom left for the model dock.
+  var PLACES = {
+    land: { 2: [[0.3, 0.5, Math.PI], [0.72, 0.5, 0], [0.51, 0.77, Math.PI / 2]],
+            3: [[0.46, 0.46, -Math.PI / 2], [0.82, 0.5, 0], [0.14, 0.4, Math.PI], [0.5, 0.86, Math.PI / 2]],
+            4: [[0.44, 0.44, -Math.PI / 2], [0.84, 0.3, 0], [0.14, 0.38, Math.PI], [0.73, 0.79, Math.PI / 2], [0.49, 0.88, Math.PI / 2]] },
+    tall: { 2: [[0.5, 0.27, -Math.PI / 2], [0.5, 0.76, Math.PI / 2], [0.8, 0.52, 0]],
+            3: [[0.42, 0.24, -Math.PI / 2], [0.6, 0.76, Math.PI / 2], [0.8, 0.47, 0], [0.2, 0.5, Math.PI]],
+            4: [[0.45, 0.2, -Math.PI / 2], [0.6, 0.79, Math.PI / 2], [0.2, 0.52, Math.PI], [0.8, 0.46, 0], [0.15, 0.22, Math.PI]] }
+  };
+  function places(n, land) {
+    var P = PLACES[land ? "land" : "tall"][n];
+    if (P) return P;
+    P = [land ? [0.22, 0.5, Math.PI] : [0.5, 0.18, -Math.PI / 2]];  // five or more: the rest on an arc beyond the X2
+    for (var i = 1; i < n; i++) {
+      var a = (land ? -Math.PI / 2 : 0) + Math.PI * (0.1 + 0.8 * (i - 1) / Math.max(1, n - 2));
+      P.push(land ? [0.22 + 0.62 * Math.cos(a) * 0.95, 0.5 + 0.44 * Math.sin(a), a] : [0.5 + 0.4 * Math.cos(a), 0.18 + 0.7 * Math.sin(a), a]);
+    }
+    return P.concat([land ? [0.5, 0.88, Math.PI / 2] : [0.86, 0.2, 0]]);
+  }
+  function layout() {
+    var m = Math.min(W, H), land = W > H * 1.05, n = MK.length, pl = places(n, land);
+    mkSig = machineSig();
+    FS = Math.max(9, Math.min(12, m / 52));
+    TOP = W < 520 ? 46 + 12 * (Math.ceil(n / 2) - 1) : 64 + 15 * (n - 2);  // room for a readout line per machine
+    BOT = Math.max(132, H * 0.22);
+    var y0 = TOP, y1 = H - BOT, r = Math.max(15, m * 0.055);
+    MK.forEach(function (k, i) {  // more machines, smaller hubs
+      var h = hubs[k];
+      h.x = W * pl[i][0]; h.y = y0 + (y1 - y0) * pl[i][1]; h.fan = pl[i][2];
+      h.r = r * hubScale(k) * (n > 2 ? Math.max(0.7, 1.16 - 0.08 * n) : 1);
+    });
+    var P = hubs.people, pp = pl[n];  // outside people: a small hub, set off from the machines, only while their work exists
+    P.x = W * pp[0]; P.y = y0 + (y1 - y0) * pp[1]; P.fan = pp[2]; P.r = Math.max(r * 0.5, FS * 1.9);
+    MK.forEach(function (k) {  // each machine's own model: its home place
+      var h = hubs[k], a = k === "ws" ? -Math.PI * 0.78 : Math.PI * 0.22, D = h.r * 2.05 + 36;
+      if (models[k]) { models[k].hx = h.x + Math.cos(a) * D; models[k].hy = h.y + Math.sin(a) * D; }
+    });
+    placeModels();
+    modelKeys().forEach(function (k) { var mm = models[k]; mm.x = mm.tx; mm.y = mm.ty; mm.sc = mm.tsc; });  // a resize jumps
+    var gr = Math.max(16, Math.min(26, m * 0.035));
+    gauge = { x: W - 14 - gr - 8, y: H - BOT - gr - 26, r: gr };
+    starLayout(); slot(); closePop();
+  }
+  function seedAmbient() {
+    var n = Math.max(12, Math.min(40, Math.round(W * H / 30000)));  // faint dust; the stars are finished items
+    ambient = [];
+    for (var i = 0; i < n; i++) {
+      ambient.push({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - 0.5) * 10,
+                     vy: (Math.random() - 0.5) * 10, a: 0.25 + Math.random() * 0.5 });
+    }
+  }
+  function threadPos(h, i) {
+    var n = Math.max(1, h.threads.length), a = h.rot + i * 6.2832 / n, R = h.r * 2.05;
+    return { x: h.x + Math.cos(a) * R, y: h.y + Math.sin(a) * R };
+  }
+  function separate(a, b, share) {  // push two axis-aligned boxes apart; share is a's part of the move
+    var dx = a.px - b.px, dy = a.py - b.py, ox = a.hw + b.hw - Math.abs(dx), oy = a.hh + b.hh - Math.abs(dy);
+    if (ox <= 0 || oy <= 0) return;
+    if (ox < oy) { var s = (dx < 0 ? -1 : 1) * ox; a.px += s * share; b.px -= s * (1 - share); }
+    else { var t = (dy < 0 ? -1 : 1) * oy; a.py += t * share; b.py -= t * (1 - share); }
+  }
+  function overlap(a, b) {
+    var ox = a.hw + b.hw - Math.abs(a.px - b.px), oy = a.hh + b.hh - Math.abs(a.py - b.py);
+    return ox > 0 && oy > 0 ? ox * oy : 0;
+  }
+  function angGap(a, b) { var d = Math.abs(a - b) % 6.2832; return d > Math.PI ? 6.2832 - d : d; }
+  function slot() {
+    if (!W || !H) return;
+    // Hubs, with their thread ring and the line under them, are fixed obstacles; each job then takes the
+    // clearest spot around its own hub, preferring the hub's outward side, and a short relaxation tidies up.
+    var placed = MK.map(function (k) {
+      var h = hubs[k], R = h.r * 2.05;
+      return { px: h.x, py: h.y + (FS + 12) / 2, hw: R + 8, hh: R + (FS + 12) / 2 + 8, fixed: true };
+    }).concat(hubs.people.on ? [{ px: hubs.people.x, py: hubs.people.y, hw: hubs.people.r * P_KEEP + 10,
+                                  hh: hubs.people.r * P_KEEP + 10, fixed: true }] : []).concat(modelKeys().map(function (k) {
+      var mm = models[k], f = mm.tsc || 1;
+      return { px: mm.tx != null ? mm.tx : mm.x, py: (mm.ty != null ? mm.ty : mm.y) + 14 * f, hw: 50 * f, hh: 40 * f, fixed: true };
+    })).concat(gauge ? [{ px: gauge.x, py: gauge.y + 8, hw: gauge.r + 26, hh: gauge.r + 18, fixed: true }] : []);
+    var nodes = [];
+    for (var id in clusters) nodes.push(clusters[id]);
+    nodes.sort(function (a, b) { return (b.total != null) - (a.total != null) || (a.id < b.id ? -1 : 1); });
+    nodes.forEach(function (c) {
+      var h = hubs[c.machine], big = c.total != null, best = null, cost = Infinity;
+      c.size = big ? Math.max(12, h.r * 0.62) : Math.max(4, h.r * 0.2);
+      ctx.font = "600 " + (big ? FS : FS - 1) + "px " + MONO;
+      c.hw = Math.max(c.size + 6, ctx.measureText(trunc(c.label, big ? 26 : 22)).width / 2 + 5);
+      if (big) c.hw = Math.max(c.hw, ctx.measureText("00,000/00,000  → MON 00:00").width / 2 + 4);
+      c.hh = big ? c.size + FS + 16 : c.size / 2 + FS / 2 + 6;
+      var R0 = (c.machine === "people" ? h.r * P_KEEP + 36 : h.r * 2.05 + 14) + c.hh;  // people work sits a tie's length out
+      for (var ri = 0; ri < 4; ri++) {
+        for (var s = 0; s < 36; s++) {
+          var ang = s * Math.PI / 18, R = R0 * (1 + ri * 0.28);
+          var box = { px: h.x + Math.cos(ang) * R, py: h.y + Math.sin(ang) * R, hw: c.hw, hh: c.hh };
+          if (box.px - c.hw < 6 || box.px + c.hw > W - 6 || box.py - c.hh < TOP || box.py + c.hh > H - BOT - 4) continue;
+          var over = 0;
+          placed.forEach(function (b) { over += overlap(box, b); });
+          var k = over * 4 + angGap(ang, h.fan) * 120 + ri * 90;
+          if (k < cost) { cost = k; best = box; }
+        }
+      }
+      if (!best) best = { px: Math.max(c.hw + 6, Math.min(W - c.hw - 6, h.x)), py: (TOP + H - BOT) / 2 };
+      c.px = best.px; c.py = best.py;
+      if (c.x == null) { c.x = h.x; c.y = h.y; }
+      placed.push(c);
+    });
+    for (var it = 0; it < 30; it++) {
+      for (var i = 0; i < placed.length; i++) {
+        for (var j = i + 1; j < placed.length; j++) {
+          var a = placed[i], b = placed[j];
+          if (a.fixed && b.fixed) continue;
+          if (a.fixed) separate(b, a, 1); else if (b.fixed) separate(a, b, 1); else separate(a, b, 0.5);
+        }
+      }
+    }
+    nodes.forEach(function (c) {
+      c.tx = Math.max(c.hw + 6, Math.min(W - c.hw - 6, c.px));
+      c.ty = Math.max(TOP + c.hh, Math.min(H - BOT - c.hh - 4, c.py));
+    });
+    peopleAngles();
+  }
+
+  // ---- data ----
+  function machineSig() { return MK.map(function (k) { return k + ":" + hubScale(k).toFixed(3); }).join(","); }
+  function apply(d) {
+    data = d;
+    MK = ["x2", "ws"].concat(Object.keys(d.machines || {}).filter(function (k) {  // the X2, the workstation, any others
+      return k !== "x2" && k !== "ws" && k !== "people" && /^[a-z][a-z0-9]*$/.test(k);
+    }));
+    for (var hk in hubs) if (hk !== "people" && MK.indexOf(hk) < 0) delete hubs[hk];
+    MK.forEach(function (k, i) {
+      var m = (d.machines || {})[k] || {}, h = hubs[k] = hubs[k] || hub(k), n = (m.threads || []).length;
+      h.m = m; h.fresh = m.fresh !== false;
+      while (h.threads.length < n) h.threads.push(0);
+      h.threads.length = n;
+      if (i > 1) MCOL[k] = EXTRA_COL[(i - 2) % EXTRA_COL.length];
+    });
+    var seen = {};
+    (d.items || []).forEach(function (it) {
+      var k = it.machine === "people" ? "people" : isMachine(it.machine) ? it.machine : "ws", c = clusters[it.id];
+      if (!c) c = clusters[it.id] = { id: it.id, x: null, y: null, lit: 0, pending: 0, flash: 0, acc: 0, back: 0,
+                                        spin: Math.random() * 6.28, wave: 0, burst: 0 };
+      if (c.done != null && it.done != null && it.done > c.done) {
+        c.pending += Math.min(10, it.done - c.done); c.flash = 1; c.wave = 1;
+        c.burst = it.total && it.done >= it.total ? 26 : Math.min(10, it.done - c.done);  // reaching 100% gets a big burst
+      }
+      c.done = it.done; c.total = it.total; c.rate = it.rate_h; c.eta = it.eta;
+      c.label = it.label; c.state = it.state; c.machine = k; c.cpus = it.cpus || null; c.compute = !!it.compute;
+      c.name = it.name; c.detail = it.detail; c.ai = it.ai || []; c.aiLive = it.ai_live || []; c.started = it.started;
+      seen[it.id] = 1;
+    });
+    // Finished items are stars, permanently. A live ring that finishes graduates: it bursts and flies to its star.
+    var doneIds = {};
+    (d.done || []).forEach(function (e) { doneIds[e.id] = 1; });
+    (d.done || []).forEach(function (e) {
+      var st = stars[e.id];
+      if (!st) {
+        st = stars[e.id] = { id: e.id, flare: 0, grad: false, tw: 0.6 + 1.4 * hsh("t:" + e.id), ph: 6.2832 * hsh("p:" + e.id) };
+        if (knownDone && !clusters[e.id]) st.flare = 1;  // finished elsewhere: it flares in where it belongs
+      }
+      st.label = e.label; st.name = e.name; st.machine = isMachine(e.machine) ? e.machine : "ws"; st.group = e.group;
+      st.done = e.done; st.started = e.started; st.detail = e.detail;
+      var took = e.started && e.done ? Math.max(0, e.done - e.started) : 0;
+      st.r = 1.1 + Math.min(1.6, Math.log10(1 + took / 600) * 0.8);
+    });
+    for (var sid in stars) if (!doneIds[sid]) delete stars[sid];
+    starList = Object.keys(stars).map(function (k2) { return stars[k2]; }).sort(function (a, b) { return (a.done || 0) - (b.done || 0); });
+    starLayout();
+    for (var id in clusters) {
+      if (seen[id]) continue;
+      var gc = clusters[id];
+      if (knownDone && doneIds[id] && gc.x != null && stars[id]) {
+        burst(gc, 26);
+        grads.push({ id: id, from: { x: gc.x, y: gc.y }, size: gc.size, col: STATE_COL[gc.state] || C.cyan, t: 0 });
+        stars[id].grad = true;
+      }
+      delete clusters[id];
+    }
+    knownDone = doneIds;
+    budget = d.budget || null;
+    var wasOn = !!hubs.people.on;
+    hubs.people.m = d.people || null; hubs.people.on = !!(d.people && (d.people.cells || []).length);
+    if (hubs.people.on !== wasOn || machineSig() !== mkSig) layout();  // a hub came, went or changed size
+    var seenModels = {}, newModels = false;
+    (d.models || []).forEach(function (mm) {
+      if (!models[mm.key]) { models[mm.key] = { x: 0, y: 0, m: {} }; newModels = true; }
+      models[mm.key].m = mm; seenModels[mm.key] = 1;
+    });
+    modelKeys().forEach(function (k) { if (notMachine(k) && !seenModels[k]) { delete models[k]; newModels = true; } });
+    var onSig = modelKeys().map(function (k) { return k + (modelOn(k) ? "+" : "-"); }).join(",");
+    if (newModels || onSig !== lastOnSig) {  // a model started or stopped: it glides between its place and the dock
+      lastOnSig = onSig; placeModels(); starLayout();
+      if (!modelsShown) { modelKeys().forEach(function (k) { var mm = models[k]; mm.x = mm.tx; mm.y = mm.ty; mm.sc = mm.tsc; }); modelsShown = true; }
+    }
+    slot(); lanes();
+    for (var pid in clusters) if (clusters[pid].machine === "people") clusters[pid].lanes = [];
+    if (sel) renderPop();
+    var x2 = hubs.x2.m, ws = hubs.ws.m, run = 0, you = 0;
+    ticker = [];
+    (d.items || []).forEach(function (it) {
+      if (it.state === "running") run++;
+      if (it.state === "needs-you" || it.state === "problem") you++;
+      var t = "> " + trunc(it.label, 22).toUpperCase();
+      if (it.total != null) t += "  " + num(it.done) + "/" + num(it.total);
+      ticker.push(t);
+      if (it.rate_h) ticker.push("    " + it.rate_h.toFixed(it.rate_h < 10 ? 1 : 0) + " JOBS/H" + (it.eta ? "  ETA " + hhmm(it.eta) : ""));
+    });
+    ticker.push("X2.CPU " + (x2.cpu || 0).toFixed(1) + "  MEM " + (x2.mem || 0).toFixed(1) + "  GPU " + (x2.gpu || 0).toFixed(0));
+    ticker.push("X2.SIMS " + (x2.sims || 0) + "  LLM " + String(x2.llm || "").toUpperCase());
+    ticker.push("WS.CPU " + (ws.cpu || 0).toFixed(1) + "  MEM " + (ws.mem || 0).toFixed(1) + "  GPU " + (ws.gpu || 0).toFixed(0));
+    MK.slice(2).forEach(function (k) {
+      var em = hubs[k].m;
+      ticker.push(tag(k) + ".CPU " + (em.cpu || 0).toFixed(1) + "  MEM " + (em.mem || 0).toFixed(1) + (em.fresh === false ? "  NO SIGNAL" : ""));
+    });
+    (d.capacity || []).forEach(function (c) { ticker.push(trunc(c.label, 24).toUpperCase() + " " + Math.round(c.used) + "%"); });
+    if (mini) mini.textContent = MK.map(function (k) { return tag(k) + " " + Math.round(hubs[k].m.cpu || 0) + "%"; }).join(" · ") + " · "
+      + run + " running" + (you ? " · " + you + " need" + (you === 1 ? "s" : "") + " you" : "");
+  }
+  var frames = [], playT = null, lastWall = null, appliedT = null, lastDone = null;
+  function replayNow() { return playT != null ? playT : Date.now() / 1000; }
+  function poll() {  // fetch the replay window: the last ten minutes of filtered frames
+    if (busy) return;
+    busy = true;
+    fetch(FEED + "viz_frames.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (doc) {
+        var last = frames.length ? frames[frames.length - 1].t : -Infinity;
+        ((doc && doc.frames) || []).forEach(function (f) { if (f.t > last) { frames.push(f); last = f.t; } });
+        if (frames.length > 120) frames.splice(0, frames.length - 120);
+        var carry = null;  // the feed sends the stars only when they change: give every frame the latest set before it
+        frames.forEach(function (f) { if (f.done) carry = f.done; else if (carry) f.done = carry; });
+        if (!frames.length) throw new Error("no frames");
+        if (playT == null) {  // start ten minutes behind actual, or at the oldest frame if the feed is older
+          var lastT = frames[frames.length - 1].t;
+          playT = Math.max(frames[0].t, Math.min(lastT, Date.now() / 1000 - 600));
+          lastWall = Date.now() / 1000;
+        }
+        replayTick();
+      })
+      .catch(function () {  // no replay yet: the single snapshot, as before
+        if (playT != null) return;
+        return fetch(FEED + "viz.json", { cache: "no-store" }).then(function (r) { return r.json(); })
+          .then(function (d) { apply(d); kick(); });
+      })
+      .then(function () { busy = false; }, function () { busy = false; });
+  }
+  function replayTick() {  // the replay clock: real time, paused while hidden, never past the data, easing back to ten minutes behind
+    if (playT == null || !frames.length) return;
+    var w = Date.now() / 1000, dt = Math.min(5, Math.max(0, w - lastWall)), lastT = frames[frames.length - 1].t;
+    lastWall = w;
+    if (!document.hidden) playT += dt * (w - playT > 660 ? 1.25 : 1);
+    if (lastT - playT > 1500) playT = lastT - 600;
+    if (playT > lastT) playT = lastT;
+    var f = frames[0];
+    for (var i = frames.length - 1; i >= 0; i--) if (frames[i].t <= playT) { f = frames[i]; break; }
+    if (f.t === appliedT) return;
+    appliedT = f.t;
+    if (f.done) lastDone = f.done; else if (lastDone) f.done = lastDone;
+    if (!f.done) return;  // never apply a frame without its stars: that would clear the constellations
+    apply(f); kick();
+  }
+
+  // ---- motion ----
+  // Streams: each running job's lanes are the CPU threads its workers ran on (the X2 reports them per
+  // process); where a machine does not (the workstation's runs are inside WSL, and the X2 cannot see another
+  // machine's processes), its busiest threads stand in.
+  function lanes() {
+    MK.forEach(function (key) {
+      var h = hubs[key], m = h.m, n = h.threads.length, run = [], claimed = {}, used = 0;
+      for (var id in clusters) {
+        var c = clusters[id];
+        if (c.machine !== key) continue;
+        c.prevLanes = c.lanes || [];
+        c.lanes = [];
+        if (c.state === "running" && (c.total != null || c.compute)) run.push(c);
+      }
+      run.forEach(function (c) {
+        (c.cpus || []).forEach(function (t) { if (t < n) { c.lanes.push(t); claimed[t] = 1; used++; } });
+      });
+      var need = run.filter(function (c) { return !c.cpus; });
+      if (need.length) {
+        var free = [], target = (m.threads || []);
+        for (var i = 0; i < n; i++) if (!claimed[i]) free.push(i);
+        free.sort(function (a, b) { return (target[b] || 0) - (target[a] || 0); });
+        var est = key === "x2" ? Math.max(0, (m.sims || 0) - used) : Math.round((m.cpu || 0) / 100 * n * 0.9);
+        for (var j = 0; j < Math.min(est, free.length); j++) need[j % need.length].lanes.push(free[j]);
+      }
+      run.forEach(function (c) {
+        c.lanes.sort(function (a, b) { return a - b; });
+        var L = c.lanes.length, old = c.prevLanes;
+        c.lanes = c.lanes.map(function (t, i) {
+          var ln = { t: t, bend: (L > 1 ? (i / (L - 1) - 0.5) * 0.7 : 0) + 0.12,
+                     acc: old[i] ? old[i].acc : Math.random(), orb: old[i] ? old[i].orb : i * 6.2832 / Math.max(1, L) };
+          ln.path = lanePath(h, ln, c);
+          return ln;
+        });
+      });
+      // A running model server's own streams: from the threads llama-server runs on (X2) and from its machine.
+      var mm = models[key];
+      if (!mm) return;  // a machine without a model server
+      mm.lanes = [];
+      if (mm.m && mm.m.state === "Up") {
+        var base = Math.atan2(mm.y - h.y, mm.x - h.x);
+        (mm.m.cpus || []).filter(function (t) { return t < n; }).slice(0, 6).forEach(function (t, i) {
+          mm.lanes.push({ t: t, bend: 0.18 + 0.1 * i, acc: Math.random() });
+        });
+        for (var q = 0; q < 3; q++) mm.lanes.push({ ha: base + (q - 1) * 0.5, bend: (q - 1) * 0.22, acc: Math.random() });
+        mm.lanes.forEach(function (ln) { ln.path = lanePath(h, ln, mm); });
+      }
+    });
+    // AI flows: a job that uses a model server (marked on the board, or connected now), and a machine whose own
+    // processes are connected to the other machine's model server.
+    flows = [];
+    for (var id in clusters) {
+      var c = clusters[id];
+      (c.ai || []).forEach(function (k) {
+        if (models[k]) flows.push(mkFlow(c, models[k], k, (c.aiLive || []).indexOf(k) >= 0, STATE_COL[c.state] || C.cyan));
+      });
+    }
+    MK.filter(function (k) { return models[k]; }).forEach(function (k) {
+      (((models[k].m || {}).clients || {}).hosts || []).forEach(function (hk) {
+        if (hubs[hk] && hk !== k) flows.push(mkFlow(hubs[hk], models[k], k, true, C.cyan));
+      });
+    });
+    peopleTieUp();
+  }
+  function peopleAngles() {  // each reviewer sits on the outer ring, facing the work it is tied to
+    var P = hubs.people, pm = P.m || {}, cells = pm.cells || [], owner = pm.owner || [], by = {}, free = [];
+    cells.forEach(function (st, i) { var o = owner[i] || (pm.items || [])[0] || ""; (by[o] = by[o] || []).push(i); });
+    P.cellA = [];
+    for (var o in by) {
+      var c = clusters[o], idx = by[o];
+      if (!c || c.tx == null) { free = free.concat(idx); continue; }
+      var base = Math.atan2(c.ty - P.y, c.tx - P.x), gap = Math.min(0.62, 2.4 / idx.length);
+      idx.forEach(function (i, j) { P.cellA[i] = base + (j - (idx.length - 1) / 2) * gap; });
+    }
+    free.forEach(function (i, j) { P.cellA[i] = -Math.PI / 2 + j * 6.2832 / free.length; });
+  }
+  function cellPos(i) {  // a reviewer's place on the outer ring, swaying a little
+    var P = hubs.people, cur = P.cellCur || [], a = (cur[i] != null ? cur[i] : (P.cellA || [])[i] || 0)
+      + 0.05 * Math.sin(clock * 0.4 + i * 2.1), R = P.r * P_RING;
+    return { x: P.x + Math.cos(a) * R, y: P.y + Math.sin(a) * R };
+  }
+  function peopleTieUp() {  // each outside reviewer is tied to the item it works on; an item with no reviewers, to the ring
+    peopleTies = [];
+    var P = hubs.people, pm = P.m || {}, cells = pm.cells || [], owner = pm.owner || [], tied = {};
+    if (!P.on) return;
+    cells.forEach(function (st, i) {
+      var c = clusters[owner[i] || (pm.items || [])[0]];
+      if (!c) return;
+      var t = { i: i, st: st, c: c, acc: Math.random(), bend: i % 2 ? 0.14 : -0.14 };
+      t.path = function () { var a = cellPos(t.i); return { a: a, q: ctrl(a, t.c, t.bend), b: t.c }; };
+      peopleTies.push(t); tied[c.id] = 1;
+    });
+    Object.keys(clusters).forEach(function (id) {
+      var c = clusters[id];
+      if (c.machine !== "people" || tied[id]) return;
+      var t = { st: "invited", c: c, acc: 0 };
+      t.path = function () {
+        var a = Math.atan2(c.y - P.y, c.x - P.x), R = P.r * P_RING, e = { x: P.x + Math.cos(a) * R, y: P.y + Math.sin(a) * R };
+        return { a: e, q: ctrl(e, c, 0), b: c };
+      };
+      peopleTies.push(t);
+    });
+  }
+  function skirt(a, q, b, pad) {  // bend a curve's control point until the curve clears the people hub by pad
+    var P = hubs.people;
+    if (!P.on) return q;
+    var R = P.r * P_KEEP + (pad || 0), qx = q.x, qy = q.y;
+    for (var it = 0; it < 10; it++) {
+      var best = Infinity, bt = 0.5, bp = null;
+      for (var i = 1; i < 32; i++) {
+        var t = i / 32, pt = bez(a, { x: qx, y: qy }, b, t), d = Math.hypot(pt.x - P.x, pt.y - P.y);
+        if (d < best) { best = d; bt = t; bp = pt; }
+      }
+      if (best >= R) break;
+      var ux, uy;
+      if (best > 1) { ux = (bp.x - P.x) / best; uy = (bp.y - P.y) / best; }
+      else { var qd = Math.hypot(qx - P.x, qy - P.y) || 1; ux = (qx - P.x) / qd; uy = (qy - P.y) / qd; }
+      var w = Math.max(0.2, 2 * bt * (1 - bt)), mv = (R - best + 2) / w;
+      qx += ux * mv; qy += uy * mv;
+    }
+    return { x: qx, y: qy };
+  }
+  function srcPos(h, ln) {
+    return ln.t != null ? threadPos(h, ln.t) : { x: h.x + Math.cos(ln.ha) * h.r, y: h.y + Math.sin(ln.ha) * h.r };
+  }
+  function lanePath(h, ln, target) {
+    return function () { var a = srcPos(h, ln); return { a: a, q: ctrl(a, target, ln.bend), b: target }; };
+  }
+  function mkFlow(from, model, key, live, col) {
+    var f = { from: from, model: model, key: key, live: live, col: col, acc: Math.random(), back: Math.random() };
+    f.path = function () {  // once a frame, bent around the people hub
+      if (f.k !== clock || !f.g) { f.k = clock; f.g = { a: f.from, q: skirt(f.from, ctrl(f.from, f.model, 0.22), f.model, 8), b: f.model }; }
+      return f.g;
+    };
+    return f;
+  }
+  function ctrl(a, b, bend) {
+    var dx = b.x - a.x, dy = b.y - a.y;
+    return { x: (a.x + b.x) / 2 - dy * bend, y: (a.y + b.y) / 2 + dx * bend };
+  }
+  function bez(a, q, b, t) {
+    var u = 1 - t;
+    return { x: u * u * a.x + 2 * u * t * q.x + t * t * b.x, y: u * u * a.y + 2 * u * t * q.y + t * t * b.y };
+  }
+  function emit(path, dir, col, dur) {  // dir 1: along the stream to its target; -1: back to its source
+    if (packets.length > 360) return;
+    packets.push({ path: path, dir: dir, col: col, dur: dur * (0.85 + Math.random() * 0.3), t: 0 });
+  }
+  function burst(c, n) {  // a completion: sparks fly out of the job's core
+    for (var i = 0; i < n && sparks.length < 220; i++) {
+      var a = Math.random() * 6.2832, v = 30 + Math.random() * 60;
+      sparks.push({ x: c.x, y: c.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1 });
+    }
+  }
+  function step(dt) {
+    var k = Math.min(1, dt * 2.5);
+    MK.forEach(function (key) {
+      var h = hubs[key], m = h.m, n = h.threads.length;
+      h.cpu = ease(h.cpu, m.cpu || 0, k); h.mem = ease(h.mem, m.mem || 0, k);
+      var gs = m.gpus || [];
+      h.gpuArr = h.gpuArr || [];
+      h.gpuArr.length = gs.length;
+      for (var gi = 0; gi < gs.length; gi++) h.gpuArr[gi] = ease(h.gpuArr[gi] || 0, gs[gi].busy || 0, k);
+      for (var i = 0; i < n; i++) h.threads[i] = ease(h.threads[i], (m.threads || [])[i] || 0, k);
+      h.rot += dt * (0.03 + 0.22 * h.cpu / 100);
+      for (var id in clusters) {
+        var c = clusters[id];
+        if (c.machine !== key || !c.lanes) continue;
+        c.lanes.forEach(function (ln) {
+          var u = (h.threads[ln.t] || 0) / 100;
+          ln.acc += dt * (0.25 + 0.9 * u);
+          ln.orb = (ln.orb || 0) + dt * (0.5 + 1.6 * u);
+          while (ln.acc >= 1) { ln.acc -= 1; emit(ln.path, 1, STATE_COL[c.state] || C.cyan, 1.6); }
+        });
+      }
+      // The model server's activity: requests in flight (X2) and its machine's GPU load.
+      var mm = models[key];
+      if (!mm) return;
+      var up = mm.m && mm.m.state === "Up", req = (mm.m && mm.m.requests) || 0;
+      mm.act = ease(mm.act || 0, up ? Math.min(1, 0.2 + 0.35 * req + 0.5 * (m.gpu || 0) / 100) : 0, Math.min(1, dt * 2));
+      mm.spin = (mm.spin || 0) + dt * (0.2 + 1.8 * mm.act);
+      (mm.lanes || []).forEach(function (ln) {
+        ln.acc += dt * (0.12 + 1.3 * mm.act);
+        while (ln.acc >= 1) { ln.acc -= 1; emit(ln.path, Math.random() < 0.55 ? 1 : -1, C.green, 1.5); }
+      });
+    });
+    modelKeys().filter(notMachine).forEach(function (k) {  // cloud and other local models: active while running
+      var mm = models[k], up = mm.m && mm.m.state === "Up";
+      mm.act = ease(mm.act || 0, up ? 0.6 : 0, Math.min(1, dt * 2));
+      mm.spin = (mm.spin || 0) + dt * (0.2 + 1.8 * mm.act);
+    });
+    modelKeys().forEach(function (k) {  // models glide between their places and the dock
+      var mm = models[k], e = Math.min(1, dt * 2.2);
+      if (mm.tx != null) { mm.x = ease(mm.x, mm.tx, e); mm.y = ease(mm.y, mm.ty, e); mm.sc = ease(mm.sc || 1, mm.tsc || 1, e); }
+    });
+    var PH = hubs.people;  // outside reviewers: each cell eases to its place; slow, human-paced traffic to their work
+    if (PH.on) {
+      var tgt = PH.cellA || [];
+      PH.cellCur = (PH.cellCur || []).slice(0, tgt.length);
+      tgt.forEach(function (a, i) {
+        var c0 = PH.cellCur[i];
+        PH.cellCur[i] = c0 == null ? a : c0 + Math.atan2(Math.sin(a - c0), Math.cos(a - c0)) * Math.min(1, dt * 1.5);
+      });
+      peopleTies.forEach(function (t) {
+        if (t.st === "invited") return;
+        t.acc += dt * (t.st === "reviewing" ? 0.3 : 0.1);
+        while (t.acc >= 1) { t.acc -= 1; emit(t.path, 1, t.st === "reviewing" ? C.amber : C.green, 3); }
+      });
+    }
+    flows.forEach(function (f) {  // prompts out in the job's colour, responses back in green
+      var mm = f.model.m || {};
+      if (mm.state !== "Up") return;
+      var rate = f.live ? 0.6 + 0.5 * (mm.requests || 0) : 0.18;
+      f.acc += dt * rate;
+      while (f.acc >= 1) { f.acc -= 1; emit(f.path, 1, f.col, 1.8); }
+      f.back += dt * rate * 0.8;
+      while (f.back >= 1) { f.back -= 1; emit(f.path, -1, C.green, 1.8); }
+    });
+    for (var id in clusters) {
+      var c = clusters[id], kk = Math.min(1, dt * 1.6);
+      c.x = ease(c.x, c.tx, kk); c.y = ease(c.y, c.ty, kk);
+      c.lit = ease(c.lit, c.total ? c.done / c.total : 0, Math.min(1, dt * 1.2));
+      c.flash = Math.max(0, c.flash - dt * 0.7);
+      c.wave = Math.max(0, (c.wave || 0) - dt * 0.9);
+      var turning = c.state === "running" && c.lanes && c.lanes.length;
+      c.spin = (c.spin || 0) + dt * (turning ? 0.15 + Math.min(1.4, (c.rate || 0) / 60) : 0.03);
+      if (c.burst) { burst(c, 4 + 2 * c.burst); c.burst = 0; }
+      if (c.pending > 0) {
+        c.back += dt * 3;
+        while (c.back >= 1 && c.pending > 0) {
+          c.back -= 1; c.pending--;
+          if (c.lanes && c.lanes.length) emit(c.lanes[Math.floor(Math.random() * c.lanes.length)].path, -1, C.green, 1.3);
+        }
+      }
+    }
+    for (var si = sparks.length - 1; si >= 0; si--) {
+      var sp = sparks[si];
+      sp.x += sp.vx * dt; sp.y += sp.vy * dt; sp.vx *= 1 - dt * 2.2; sp.vy *= 1 - dt * 2.2; sp.life -= dt * 1.3;
+      if (sp.life <= 0) sparks.splice(si, 1);
+    }
+    MK.slice(1).forEach(function (mk) {  // the private link links from the X2: packets each way at their real rates
+      var L = link(mk), rt = linkRates(mk);
+      [[rt[0], 0, C.cyan], [rt[1], 1, mcol(mk)]].forEach(function (e) {
+        var r = Math.min(5, Math.log10(1 + (e[0] || 0) / 2000) * 1.3), i = e[1];
+        L.acc[i] += dt * r;
+        while (L.acc[i] >= 1) { L.acc[i] -= 1; emit(function () { return linkPaths(mk)[i]; }, 1, e[2], 2.4); }
+      });
+    });
+    grads.forEach(function (g) {
+      g.t += dt / 2.8;
+      var gp = gradPos(g);
+      if (gp && Math.random() < dt * 28 && sparks.length < 220) {
+        sparks.push({ x: gp.x, y: gp.y, vx: (Math.random() - 0.5) * 24, vy: (Math.random() - 0.5) * 24, life: 0.7 });
+      }
+    });
+    for (var gi = grads.length - 1; gi >= 0; gi--) {
+      if (grads[gi].t < 1) continue;
+      var gs = stars[grads[gi].id];
+      if (gs) { gs.grad = false; gs.flare = 1; }
+      grads.splice(gi, 1);
+    }
+    starList.forEach(function (st) { if (st.flare > 0) st.flare = Math.max(0, st.flare - dt * 0.45); });
+    if (sel) { ringSel = sel; ringA = Math.min(1, ringA + dt * 6); } else ringA = Math.max(0, ringA - dt * 6);
+    ambient.forEach(function (p) {
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.x < -20) p.x = W + 20; else if (p.x > W + 20) p.x = -20;
+      if (p.y < -20) p.y = H + 20; else if (p.y > H + 20) p.y = -20;
+    });
+    for (var i = packets.length - 1; i >= 0; i--) { packets[i].t += dt / packets[i].dur; if (packets[i].t >= 1) packets.splice(i, 1); }
+    tickY += dt * 10;
+  }
+
+  // ---- drawing ----
+  function hsh(str) {  // a stable 0..1 hash, so every star keeps its place
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0) / 4294967296;
+  }
+  function starLayout() {  // each board group is a constellation around its own centre
+    if (!W || !H) return;
+    var m = Math.min(W, H), y0 = TOP + 10, y1 = H - BOT - 10;
+    groupCenters = {};
+    // Keep-clear zones: the hubs with their thread rings, the model brains and the budget dial.
+    var keep = MK.concat(hubs.people.on ? ["people"] : [])
+      .map(function (k) { return { x: hubs[k].x, y: hubs[k].y, r: hubs[k].r * (k === "people" ? P_KEEP : 2.05) + 10 }; })
+      .concat(modelKeys().map(function (k) {
+        var mm = models[k], f = mm.tsc || 1, x = mm.tx != null ? mm.tx : mm.x, y = mm.ty != null ? mm.ty : mm.y;
+        return f < 1 ? { x: x, y: y + 14, r: 12 * brainScale() * f + 36 }  // a docked model and its label below it
+                     : { x: x, y: y + 10, r: 12 * brainScale() + 22 };
+      }))
+      .concat(gauge ? [{ x: gauge.x, y: gauge.y, r: gauge.r + 18 }] : []);
+    function clearOf(x, y, pad) {
+      return keep.every(function (z) { return Math.hypot(x - z.x, y - z.y) > z.r + pad; });
+    }
+    starList.forEach(function (st) {
+      var gc = groupCenters[st.group];
+      if (!gc) {  // a stable spot for the constellation, the first hashed candidate clear of the busy areas
+        for (var k = 0; k < 16 && !gc; k++) {
+          var cx = 40 + hsh("g" + k + ":" + st.group) * (W - 80), cy = y0 + 24 + hsh("v" + k + ":" + st.group) * Math.max(10, y1 - y0 - 48);
+          var apart = Object.keys(groupCenters).every(function (g2) { return Math.hypot(cx - groupCenters[g2].x, cy - groupCenters[g2].y) > 0.22 * m; });
+          if ((clearOf(cx, cy, 0.1 * m) && apart) || k === 15) gc = { x: cx, y: cy, n: 0 };
+        }
+        groupCenters[st.group] = gc;
+      }
+      gc.n++;
+      var a = hsh("a:" + st.id) * 6.2832, rr = (0.05 + 0.13 * hsh("r:" + st.id)) * m;
+      var x = gc.x + Math.cos(a) * rr, y = gc.y + Math.sin(a) * rr * 0.8;
+      keep.forEach(function (z) {  // a star that would sit inside a busy area moves just outside it
+        var dx = x - z.x, dy = y - z.y, d = Math.hypot(dx, dy) || 1;
+        if (d < z.r + 4) { x = z.x + dx / d * (z.r + 4); y = z.y + dy / d * (z.r + 4); }
+      });
+      st.x = Math.max(8, Math.min(W - 8, x));
+      st.y = Math.max(y0, Math.min(y1, y));
+    });
+  }
+  function drawStars() {
+    ambient.forEach(function (p) { dot(p.x, p.y, 0.8, rgba(C.white, p.a * 0.3)); });
+    var byGroup = {}, nowS = replayNow();
+    starList.forEach(function (st) { (byGroup[st.group] = byGroup[st.group] || []).push(st); });
+    ctx.lineWidth = 0.7;
+    for (var g in byGroup) {  // a constellation's lines join its stars in the order they finished
+      var L = byGroup[g];
+      for (var i = 1; i < L.length; i++) {
+        if (L[i].grad || L[i - 1].grad) continue;
+        ctx.strokeStyle = rgba(C.mag, 0.17); line(L[i - 1].x, L[i - 1].y, L[i].x, L[i].y);
+      }
+      var gc = groupCenters[g];
+      if (gc && L.length > 1) text(trunc(g, 28).toUpperCase(), gc.x, gc.y - 0.2 * Math.min(W, H) * 0.8, rgba(C.white, 0.16), Math.max(8, FS - 3), "center");
+    }
+    starList.forEach(function (st) {
+      if (st.grad) return;
+      var age = st.done ? nowS - st.done : 1e9, recent = age < 86400, base = recent ? 0.95 : age < 7 * 86400 ? 0.62 : 0.4;
+      var tw = 0.72 + 0.28 * Math.sin(clock * st.tw + st.ph), col = mcol(st.machine);
+      if (recent || st.flare > 0) dot(st.x, st.y, st.r * 3 + 10 * st.flare, rgba(col, 0.07 + 0.3 * st.flare));
+      dot(st.x, st.y, st.r + 1.6 * st.flare, rgba(C.white, base * tw));
+      if (st.flare > 0) {
+        var fl = 5 + 12 * st.flare;
+        ctx.strokeStyle = rgba(C.white, 0.6 * st.flare); ctx.lineWidth = 1;
+        line(st.x - fl, st.y, st.x + fl, st.y); line(st.x, st.y - fl, st.x, st.y + fl);
+      }
+    });
+  }
+  function gradPos(g) {
+    var st = stars[g.id];
+    if (!st) return null;
+    var e = 1 - Math.pow(1 - Math.min(1, g.t), 3);
+    return bez(g.from, ctrl(g.from, st, 0.4), st, e);
+  }
+  function drawGrads() {  // a finished job flying to its star, shrinking as it goes
+    grads.forEach(function (g) {
+      var p = gradPos(g);
+      if (!p) return;
+      var e = 1 - Math.pow(1 - Math.min(1, g.t), 3), sz = g.size * (1 - e) + 2 * e;
+      dot(p.x, p.y, sz * 1.7, rgba(g.col, 0.14 * (1 - e) + 0.08));
+      arc(p.x, p.y, sz, 0, 6.2832, rgba(g.col, 0.75 * (1 - e) + 0.25), 1.3);
+      dot(p.x, p.y, 1.6 + sz * 0.2, rgba(C.white, 0.95));
+    });
+  }
+  function heat(t) {  // cyan when cool, amber from 70 C, red-orange toward 100 C
+    if (t == null || t < 70) return C.cyan;
+    function mix(a, b, f) {
+      a = a.split(",").map(Number); b = b.split(",").map(Number);
+      return a.map(function (v, i) { return Math.round(v + (b[i] - v) * f); }).join(",");
+    }
+    return t < 85 ? mix(C.cyan, C.amber, (t - 70) / 15) : mix(C.amber, "255,96,72", Math.min(1, (t - 85) / 15));
+  }
+  // The links: a star from the X2, one to each other machine. The workstation's runs at the X2's own private link rates;
+  // any other machine's at the rates it reports itself (its private link interface where it has one).
+  function link(k) { return links[k] || (links[k] = { acc: [Math.random(), Math.random()], cache: null, clock: -1, mid: null }); }
+  function linkRates(k) {  // [toward the machine, from it], in bytes a second
+    var xm = hubs.x2.m || {}, m = (hubs[k] && hubs[k].m) || {};
+    if (k === "ws") return [xm.ts_tx, xm.ts_rx];
+    return [m.ts_rx != null ? m.ts_rx : m.net_rx, m.ts_tx != null ? m.ts_tx : m.net_tx];
+  }
+  function linkPaths(k) {  // a link: sent (X2 to the machine) and received, side by side, clear of the people hub
+    var L = link(k);
+    if (L.clock === clock && L.cache) return L.cache;
+    var a = hubs.x2, b = hubs[k] || a;  // a machine just removed: its last packets fade at the X2
+    L.clock = clock;
+    L.cache = [{ a: a, q: skirt(a, ctrl(a, b, 0.42), b, 6), b: b }, { a: b, q: skirt(b, ctrl(b, a, -0.36), a, 20), b: a }];
+    return L.cache;
+  }
+  function rate(b) { b = b || 0; return b < 1e3 ? b.toFixed(0) + " B/s" : b < 1e6 ? (b / 1e3).toFixed(1) + " KB/s" : (b / 1e6).toFixed(1) + " MB/s"; }
+  function drawLink() {
+    MK.slice(1).forEach(function (k) {
+      var rt = linkRates(k), P = linkPaths(k), hi = selIs("link", k);
+      var ft = Math.min(1, Math.log10(1 + (rt[0] || 0) / 2000) / 3), fr = Math.min(1, Math.log10(1 + (rt[1] || 0) / 2000) / 3);
+      strokePath(P[0], C.cyan, 0.03, 0.1 + 0.3 * ft, 10 + 40 * ft, hi);
+      strokePath(P[1], mcol(k), 0.03, 0.1 + 0.3 * fr, 10 + 40 * fr, hi);
+      link(k).mid = bez(P[0].a, P[0].q, P[0].b, 0.5);
+    });
+    ctx.setLineDash([]); ctx.lineDashOffset = 0;
+  }
+  function drawLinkLabel() {
+    MK.slice(1).forEach(function (k) {
+      var mid = link(k).mid, rt = linkRates(k);
+      if (mid) text("LINK \u2191" + rate(rt[0]) + " \u2193" + rate(rt[1]), mid.x, mid.y - 6, rgba(C.white, 0.42), Math.max(8, FS - 3), "center");
+    });
+  }
+  function drawTimeline() {  // a strip of time: recent completions, now, and each job's run toward its estimated finish
+    var nowS = replayNow(), maxEta = nowS, fs = Math.max(8, FS - 3);
+    for (var id in clusters) if (clusters[id].eta) maxEta = Math.max(maxEta, clusters[id].eta);
+    var t0 = nowS - 3 * 3600, t1 = Math.min(nowS + 48 * 3600, Math.max(nowS + 12 * 3600, maxEta + 3600));
+    var y0 = H - BOT + 8, y1 = y0 + 32, x0 = 14, x1 = W - 14;
+    function tx(t) { return x0 + (t - t0) / (t1 - t0) * (x1 - x0); }
+    ctx.strokeStyle = rgba(C.white, 0.18); ctx.lineWidth = 1; line(x0, y1 + 0.5, x1, y1 + 0.5);
+    var every = t1 - t0 > 30 * 3600 ? 6 : 3, d0 = new Date(t0 * 1000);
+    d0.setMinutes(0, 0, 0);
+    for (var t = d0.getTime() / 1000; t <= t1; t += 3600) {
+      var hr = new Date(t * 1000).getHours();
+      if (t < t0 || hr % every) continue;
+      var x = tx(t);
+      ctx.strokeStyle = rgba(C.white, hr === 0 ? 0.35 : 0.16); line(x, y1 - (hr === 0 ? 6 : 3), x, y1 + 3);
+      text(hr === 0 ? ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][new Date(t * 1000).getDay()] : pad(hr), x, y1 + fs + 4,
+           rgba(C.white, hr === 0 ? 0.5 : 0.32), fs, "center");
+    }
+    starList.forEach(function (st) {  // recent completions
+      if (st.done && st.done >= t0 && st.done <= nowS) dot(tx(st.done), y1 - 2, 1.7, rgba(C.green, 0.85));
+    });
+    tlHits = [];
+    var row = 0;
+    for (var id in clusters) {
+      var c = clusters[id];
+      if (c.total == null || !(c.eta || c.started)) continue;
+      var col = STATE_COL[c.state] || C.cyan, yy = y0 + 3 + (row % 3) * 8, a = Math.max(t0, c.started || nowS);
+      var b = c.eta || nowS, xa = tx(a), xb = tx(Math.min(b, t1)), xn = tx(Math.min(nowS, b));
+      ctx.fillStyle = rgba(col, 0.22); ctx.fillRect(xa, yy, Math.max(1, xb - xa), 3);
+      ctx.fillStyle = rgba(col, 0.75); ctx.fillRect(xa, yy, Math.max(1, xn - xa), 3);
+      if (c.eta) {
+        var mx = tx(Math.min(c.eta, t1));
+        ctx.fillStyle = rgba(col, 0.95); ctx.beginPath();
+        ctx.moveTo(mx, yy - 2.5); ctx.lineTo(mx + 3.5, yy + 1.5); ctx.lineTo(mx, yy + 5.5); ctx.lineTo(mx - 3.5, yy + 1.5); ctx.closePath(); ctx.fill();
+        var right = mx > W * 0.7;
+        text(trunc(c.label, 18) + " " + hhmm(c.eta), right ? mx - 6 : mx + 6, yy + 4.5, rgba(col, 0.8), fs, right ? "right" : "left");
+        tlHits.push({ x: mx, y: yy + 1.5, id: c.id });
+      }
+      row++;
+    }
+    var nx = tx(nowS);
+    ctx.strokeStyle = rgba(C.cyan, 0.85); ctx.lineWidth = 1.2; line(nx, y0 - 3, nx, y1 + 3);
+    text("NOW", nx, y0 - 5, rgba(C.cyan, 0.85), fs, "center", "700");
+  }
+  function drawGauge() {  // the A6 budget: used against the ceiling, with the plan marked
+    if (!budget || !budget.ceiling || !gauge) return;
+    var g = gauge, r = g.r, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
+    var f = Math.min(1, budget.used / budget.ceiling), pf = Math.min(1, (budget.planned || 0) / budget.ceiling);
+    var col = f > pf ? C.red : f > 0.8 * pf ? C.amber : C.green;
+    dot(g.x, g.y, r + 6, "rgba(8,10,24,0.7)");
+    arc(g.x, g.y, r, a0, a1, rgba(C.white, 0.13), 4);
+    arc(g.x, g.y, r, a0, a0 + (a1 - a0) * f, rgba(col, 0.9), 4);
+    var pa = a0 + (a1 - a0) * pf;
+    ctx.strokeStyle = rgba(C.white, 0.75); ctx.lineWidth = 1.5;
+    line(g.x + Math.cos(pa) * (r - 6), g.y + Math.sin(pa) * (r - 6), g.x + Math.cos(pa) * (r + 4), g.y + Math.sin(pa) * (r + 4));
+    text(budget.used.toFixed(1), g.x, g.y + 2, rgba(C.white, 0.92), FS, "center", "700");
+    text("/" + Math.round(budget.ceiling) + " H", g.x, g.y + FS, rgba(C.white, 0.5), Math.max(8, FS - 3), "center");
+    text("A6 BUDGET", g.x, g.y + r + FS + 2, rgba(C.white, 0.45), Math.max(8, FS - 3), "center", "600");
+  }
+  function drawLinks(key) {
+    var h = hubs[key], n = h.threads.length, dim = h.fresh ? 1 : 0.3, pts = [];
+    for (var i = 0; i < n; i++) pts.push(threadPos(h, i));
+    ctx.lineWidth = 0.8;
+    for (var i = 0; i < n; i++) {
+      var u = h.threads[i] / 100, p = pts[i];
+      ctx.strokeStyle = rgba(C.cyan, (0.04 + 0.42 * u) * dim); line(h.x, h.y, p.x, p.y);
+      ctx.strokeStyle = rgba(C.mag, 0.14 * dim); line(p.x, p.y, pts[(i + 1) % n].x, pts[(i + 1) % n].y);
+      if (n > 8) { ctx.strokeStyle = rgba(C.mag, 0.05 * dim); line(p.x, p.y, pts[(i + 3) % n].x, pts[(i + 3) % n].y); }
+    }
+    for (var id in clusters) {
+      var c = clusters[id];
+      if (c.machine !== key) continue;
+      if (c.lanes && c.lanes.length) continue;
+      ctx.setLineDash(c.state === "waiting" ? [3, 5] : []);
+      ctx.strokeStyle = rgba(STATE_COL[c.state] || C.cyan, (c.total != null ? 0.24 : 0.12) * dim);
+      line(h.x, h.y, c.x, c.y);
+    }
+    ctx.setLineDash([]);
+  }
+  function strokePath(g, col, a1, a2, speed, hi) {  // a soft underlay and a dashed flow on top
+    ctx.setLineDash([]); ctx.lineWidth = hi ? 3 : 2.2; ctx.strokeStyle = rgba(col, hi ? a1 * 2 : a1);
+    ctx.beginPath(); ctx.moveTo(g.a.x, g.a.y); ctx.quadraticCurveTo(g.q.x, g.q.y, g.b.x, g.b.y); ctx.stroke();
+    if (speed) { ctx.setLineDash([2, 8]); ctx.lineDashOffset = -clock * speed; } else { ctx.setLineDash([3, 6]); ctx.lineDashOffset = 0; }
+    ctx.lineWidth = hi ? 1.6 : 1.1; ctx.strokeStyle = rgba(col, hi ? Math.min(1, a2 * 1.6) : a2);
+    ctx.beginPath(); ctx.moveTo(g.a.x, g.a.y); ctx.quadraticCurveTo(g.q.x, g.q.y, g.b.x, g.b.y); ctx.stroke();
+  }
+  function selIs(type, key, i) { return !!sel && sel.type === type && sel.key === key && (i == null || sel.i === i); }
+  function drawStreams() {
+    for (var id in clusters) {
+      var c = clusters[id], h = hubs[c.machine], col = STATE_COL[c.state] || C.cyan, dim = h.fresh ? 1 : 0.35;
+      if (!c.lanes || !c.lanes.length) continue;
+      c.lanes.forEach(function (ln) {
+        var u = (h.threads[ln.t] || 0) / 100, hi = selIs("thread", c.machine, ln.t) || selIs("job", c.id);
+        strokePath(ln.path(), col, (0.03 + 0.05 * u) * dim, (0.18 + 0.4 * u) * dim, 24 + 46 * u, hi);
+      });
+    }
+    MK.filter(function (k) { return models[k]; }).forEach(function (k) {
+      var mm = models[k], a = mm.act || 0, hi = selIs("model", k);
+      (mm.lanes || []).forEach(function (ln) { strokePath(ln.path(), C.green, 0.04 + 0.06 * a, 0.15 + 0.5 * a, 18 + 50 * a, hi); });
+    });
+    flows.forEach(function (f) {
+      var up = f.model.m && f.model.m.state === "Up", hi = selIs("model", f.key) || (f.from.id != null && selIs("job", f.from.id));
+      if (up) strokePath(f.path(), C.mag, 0.08, f.live ? 0.65 : 0.35, f.live ? 55 : 22, hi);
+      else strokePath(f.path(), C.grey, 0.02, 0.25, 0, hi);  // uses an AI that is not running: a still, dashed link
+    });
+    peopleTies.forEach(function (t) {  // outside reviewers tied to their work
+      var col = t.st === "returned" ? C.green : t.st === "reviewing" ? C.amber : C.cyan;
+      var hi = selIs("people", "people") || selIs("job", t.c.id);
+      if (t.st === "invited") strokePath(t.path(), col, 0.02, 0.22, 0, hi);
+      else strokePath(t.path(), col, 0.05, t.st === "reviewing" ? 0.42 : 0.32, t.st === "reviewing" ? 12 : 6, hi);
+    });
+    ctx.setLineDash([]); ctx.lineDashOffset = 0;
+  }
+  function drawPackets() {
+    packets.forEach(function (p) {
+      var g = p.path(), f = Math.sin(Math.PI * p.t);
+      for (var k = 0; k < 4; k++) {  // the packet and a short trail behind it
+        var t = p.dir > 0 ? p.t - k * 0.035 : 1 - p.t + k * 0.035;
+        if (t < 0 || t > 1) continue;
+        var pt = bez(g.a, g.q, g.b, t), fade = f * (1 - k * 0.28);
+        if (k === 0) dot(pt.x, pt.y, 4.5, rgba(p.col, 0.14 * fade));
+        dot(pt.x, pt.y, k === 0 ? 1.7 : 1.1, rgba(p.col, 0.9 * fade));
+      }
+    });
+    sparks.forEach(function (sp) { dot(sp.x, sp.y, 3, rgba(C.green, 0.12 * sp.life)); dot(sp.x, sp.y, 1.2, rgba(C.green, 0.9 * sp.life)); });
+  }
+  function hexagon(x, y, r, rot, stroke, w) {
+    ctx.beginPath();
+    for (var i = 0; i < 6; i++) {
+      var a = rot + i * Math.PI / 3;
+      if (i) ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); else ctx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    ctx.closePath(); ctx.strokeStyle = stroke; ctx.lineWidth = w; ctx.stroke();
+  }
+  function drawClusters() {
+    var nowS = replayNow();
+    for (var id in clusters) {
+      var c = clusters[id], col = STATE_COL[c.state] || C.cyan, s = c.size;
+      var alert = c.state === "needs-you" || c.state === "problem", pulse = alert ? 0.5 + 0.5 * Math.sin(clock * 4) : 0;
+      if (c.total == null) {  // an item without live progress: a small standby hexagon
+        if (alert) dot(c.x, c.y, s * 3, rgba(col, 0.1 + 0.12 * pulse));
+        hexagon(c.x, c.y, s + 1.5, clock * 0.2, rgba(col, c.state === "waiting" ? 0.45 : 0.8), 1.2);
+        dot(c.x, c.y, 1.4, rgba(col, 0.8));
+        continue;
+      }
+      var nl = (c.lanes || []).length, live = c.state === "running" && nl > 0, standby = !live && !alert;
+      if (c.started && c.eta && c.eta > c.started) {  // the time arc: elapsed against the estimated finish
+        var tf = Math.max(0, Math.min(1, (nowS - c.started) / (c.eta - c.started))), ta = -Math.PI / 2 + 6.2832 * tf;
+        arc(c.x, c.y, s + 10, -Math.PI / 2, ta, rgba(C.white, 0.16), 1);
+        dot(c.x + Math.cos(ta) * (s + 10), c.y + Math.sin(ta) * (s + 10), 1.6, rgba(C.white, 0.55));
+      }
+      ctx.lineWidth = 1;
+      for (var i = 0; i < 24; i++) {  // the tick dial, turning at the job's rate
+        var a = c.spin + i * 6.2832 / 24, major = i % 6 === 0, r0 = s + 3, r1 = s + (major ? 7 : 5);
+        ctx.strokeStyle = rgba(col, (major ? 0.5 : 0.22) * (standby ? 0.5 : 1));
+        line(c.x + Math.cos(a) * r0, c.y + Math.sin(a) * r0, c.x + Math.cos(a) * r1, c.y + Math.sin(a) * r1);
+      }
+      var n = Math.max(10, Math.min(40, Math.round(6 + 10 * Math.log10(c.total + 1)))), lit = c.lit * n;
+      for (var i = 0; i < n; i++) {  // the progress ring of nodes
+        var a = -Math.PI / 2 + i * 6.2832 / n + clock * 0.12, x = c.x + Math.cos(a) * s, y = c.y + Math.sin(a) * s;
+        var on = i < Math.floor(lit) ? 1 : (i < lit ? lit - Math.floor(lit) : 0);
+        if (on > 0) dot(x, y, 4.5, rgba(col, 0.09 * on));
+        dot(x, y, 1.1 + 1.3 * on, on > 0 ? rgba(col, 0.35 + 0.65 * on) : rgba(C.grey, 0.28));
+      }
+      arc(c.x, c.y, s * 0.64, -Math.PI / 2, -Math.PI / 2 + 6.2832 * c.lit, rgba(col, 0.8), 1.6);
+      // The core pulses with its workers; a radar sweep while it runs; a standby hexagon while it waits.
+      var cp = 0.5 + 0.5 * Math.sin(clock * (1.2 + 0.25 * nl)), cr = s * 0.46;
+      var g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, cr * 1.5);
+      g.addColorStop(0, rgba(col, live ? 0.42 + 0.25 * cp : 0.14)); g.addColorStop(0.55, rgba(col, live ? 0.12 : 0.05));
+      g.addColorStop(1, rgba(col, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, cr * 1.5, 0, 6.2832); ctx.fill();
+      if (live) {
+        var sa = clock * 1.8 + c.spin * 0.3, hh = hubs[c.machine];
+        ctx.fillStyle = rgba(col, 0.12); ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, s * 0.6, sa - 0.7, sa); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = rgba(col, 0.55); ctx.lineWidth = 1; line(c.x, c.y, c.x + Math.cos(sa) * s * 0.6, c.y + Math.sin(sa) * s * 0.6);
+        c.lanes.slice(0, 16).forEach(function (ln) {  // the workers, one satellite each
+          var u = (hh.threads[ln.t] || 0) / 100, oa = ln.orb || 0, rr = s * 0.84;
+          dot(c.x + Math.cos(oa) * rr, c.y + Math.sin(oa) * rr, 2.6, rgba(C.white, 0.08 + 0.1 * u));
+          dot(c.x + Math.cos(oa) * rr, c.y + Math.sin(oa) * rr, 1.1 + 0.5 * u, rgba(C.white, 0.45 + 0.5 * u));
+        });
+      } else if (standby) {
+        hexagon(c.x, c.y, s * 0.42, clock * 0.15, rgba(col, 0.35), 1);
+      }
+      if (c.wave > 0) arc(c.x, c.y, s * (1 + 1.5 * (1 - c.wave)), 0, 6.2832, rgba(C.green, 0.55 * c.wave), 1.5);
+      if (c.flash > 0) dot(c.x, c.y, s * (1.15 + 0.8 * (1 - c.flash)), rgba(C.green, 0.12 * c.flash));
+      if (alert) {
+        dot(c.x, c.y, s * 1.5, rgba(col, 0.08 + 0.1 * pulse));
+        for (var w = 0; w < 4; w++) {  // warning marks circling the ring, pointing in
+          var wa = clock * 1.2 + w * Math.PI / 2, wr = s + 15, wx = c.x + Math.cos(wa) * wr, wy = c.y + Math.sin(wa) * wr;
+          ctx.fillStyle = rgba(col, 0.55 + 0.4 * pulse); ctx.beginPath();
+          ctx.moveTo(wx - Math.cos(wa) * 5, wy - Math.sin(wa) * 5);
+          ctx.lineTo(wx + Math.cos(wa + 2.4) * 4, wy + Math.sin(wa + 2.4) * 4);
+          ctx.lineTo(wx + Math.cos(wa - 2.4) * 4, wy + Math.sin(wa - 2.4) * 4);
+          ctx.closePath(); ctx.fill();
+        }
+      }
+    }
+  }
+  function drawClusterText() {
+    for (var id in clusters) {
+      var c = clusters[id], col = STATE_COL[c.state] || C.cyan;
+      if (c.total != null) {
+        text(Math.floor(100 * c.done / c.total) + "%", c.x, c.y + FS * 0.38, rgba(C.white, 0.92), FS + 1, "center", "700");
+        text(trunc(c.label, 26), c.x, c.y - c.size - 15, rgba(col, 0.95), FS, "center", "600");
+        var sub = num(c.done) + "/" + num(c.total) + (c.eta ? "  → " + hhmm(c.eta) : "");
+        text(sub, c.x, c.y + c.size + FS + 11, rgba(C.white, 0.6), FS - 1, "center");
+      } else {
+        var below = c.machine === "people" && c.y > hubs.people.y;  // a people item's label sits clear of its ties
+        text(trunc(c.label, 22), c.x, below ? c.y + c.size + FS + 2 : c.y - c.size - 5, rgba(col, 0.7), FS - 1, "center");
+      }
+    }
+  }
+  function drawHub(key) {
+    var h = hubs[key], m = h.m, dim = h.fresh ? 1 : 0.35, n = h.threads.length, hc = heat(m.temp);
+    ctx.globalCompositeOperation = "lighter";
+    for (var i = 0; i < n; i++) {
+      var u = h.threads[i] / 100, p = threadPos(h, i), col = u > 0.66 ? C.mag : C.cyan;
+      dot(p.x, p.y, 4 + 6 * u, rgba(col, 0.1 * u * dim));
+      dot(p.x, p.y, 1.2 + 2 * u, rgba(col, (0.3 + 0.7 * u) * dim));
+    }
+    var pulse = 0.5 + 0.5 * Math.sin(clock * (0.8 + h.cpu / 35));
+    dot(h.x, h.y, h.r * 1.7, rgba(hc, (0.04 + 0.05 * pulse) * dim));
+    var gArr = h.gpuArr || [], gMax = gArr.length ? Math.max.apply(null, gArr) : 0;
+    if (gMax > 5) dot(h.x, h.y, h.r * 1.45, rgba(C.green, 0.06 * gMax / 100 * (0.6 + 0.4 * pulse) * dim));  // GPU glow
+    if (m.temp > 85) {  // heat haze: ripples rising off a hot machine
+      var hz = Math.min(1, (m.temp - 85) / 15);
+      for (var q = 0; q < 3; q++) {
+        var ph = (clock * 0.35 + q / 3) % 1;
+        arc(h.x, h.y, h.r * (1.05 + 0.95 * ph), 0, 6.2832, rgba(hc, 0.22 * hz * (1 - ph) * dim), 1.2);
+      }
+    }
+    ctx.globalCompositeOperation = "source-over";
+    dot(h.x, h.y, h.r * 0.92, "rgba(8,10,24,0.92)");
+    var own = key === "x2" || key === "ws";  // any other machine's ring carries its own colour, as its link and stars do
+    arc(h.x, h.y, h.r, 0, 6.2832, rgba(own ? C.cyan : mcol(key), (own ? 0.16 : 0.32) * dim), 3);
+    arc(h.x, h.y, h.r, -Math.PI / 2, -Math.PI / 2 + 6.2832 * h.cpu / 100, rgba(hc, 0.95 * dim), 3);
+    arc(h.x, h.y, h.r * 0.76, -Math.PI / 2, -Math.PI / 2 + 6.2832 * h.mem / 100, rgba(C.mag, 0.85 * dim), 2);
+    gArr.forEach(function (gb, gi) {  // one green ring per GPU, just outside the CPU ring
+      var rr = h.r * (1.2 + 0.13 * gi);
+      arc(h.x, h.y, rr, 0, 6.2832, rgba(C.green, 0.12 * dim), 2);
+      arc(h.x, h.y, rr, -Math.PI / 2, -Math.PI / 2 + 6.2832 * gb / 100, rgba(C.green, 0.9 * dim), 2);
+    });
+    text(tag(key), h.x, h.y - 1, rgba(C.white, 0.95 * dim), FS + 2, "center", "700");
+    text(Math.round(h.cpu) + "%", h.x, h.y + FS + 1, rgba(hc, 0.9 * dim), FS - 1, "center", "600");
+    if (m.temp != null) text(Math.round(m.temp) + "\u00B0C", h.x, h.y + 2 * FS + 1, rgba(hc, 0.8 * dim), Math.max(8, FS - 3), "center", "600");
+    var sub = !h.fresh ? "NO SIGNAL" : (key === "x2" && m.sims ? m.sims + " SIMULATION WORKERS" : "");
+    if (h.fresh && gArr.length) sub += (sub ? " \u00B7 " : "") + "GPU " + Math.round(gMax) + "%";
+    text(sub, h.x, h.y + h.r * 2.05 + FS + 12, rgba(h.fresh ? C.white : C.amber, 0.55), FS - 1, "center");
+  }
+  function barGroups() {  // the strip's machine groups: two keep their split; more share the width by thread count
+    if (MK.length === 2) return [["x2", 14, W * 0.56], ["ws", W * 0.56 + 18, W - 14]];
+    var wt = MK.map(function (k) { return Math.max(4, hubs[k].threads.length + (hubs[k].gpuArr || []).length) + 8; });
+    var sum = wt.reduce(function (s, v) { return s + v; }, 0), avail = W - 28 - 18 * (MK.length - 1), x = 14;
+    return MK.map(function (k, i) { var g = [k, x, x + avail * wt[i] / sum]; x = g[2] + 18; return g; });
+  }
+  function drawBars() {
+    var y1 = H - 14, bandH = BOT - 94, groups = barGroups();
+    ctx.strokeStyle = rgba(C.mag, 0.25); ctx.lineWidth = 1; line(14, y1 + 0.5, W - 14, y1 + 0.5);
+    ctx.font = "500 " + (FS - 2) + "px " + MONO;
+    var short = groups.some(function (g) {  // when any group is too narrow for its heading, all take the short one
+      var h = hubs[g[0]];
+      return ctx.measureText(tag(g[0]) + " · " + h.threads.length + " THREADS" + ((h.gpuArr || []).length ? " · GPU" : "")).width > g[2] - g[1];
+    });
+    groups.forEach(function (g) {
+      var h = hubs[g[0]], n = h.threads.length, x0 = g[1], gw = g[2] - g[1];
+      var gb = h.gpuArr || [];
+      text(tag(g[0]) + " · " + n + (short ? "" : " THREADS" + (gb.length ? " · GPU" : "")), x0, y1 - bandH - 6, rgba(C.white, 0.45), FS - 2);
+      if (!n) return;
+      var bw = gw / (n + (gb.length ? gb.length + 0.6 : 0));
+      gb.forEach(function (busy, gi) {  // the GPUs, after a small gap, in green
+        var u = busy / 100, bh = Math.max(1, u * bandH), xg = x0 + (n + 0.6 + gi) * bw;
+        var gg = ctx.createLinearGradient(0, y1 - bh, 0, y1);
+        gg.addColorStop(0, rgba(C.green, 0.9 * (h.fresh ? 1 : 0.3)));
+        gg.addColorStop(1, rgba(C.green, 0.15));
+        ctx.fillStyle = gg; ctx.fillRect(xg + bw * 0.1, y1 - bh, bw * 0.8, bh);
+      });
+      for (var i = 0; i < n; i++) {
+        var u = h.threads[i] / 100, bh = Math.max(1, u * bandH);
+        var gr = ctx.createLinearGradient(0, y1 - bh, 0, y1);
+        gr.addColorStop(0, rgba(u > 0.66 ? C.mag : C.cyan, 0.9 * (h.fresh ? 1 : 0.3)));
+        gr.addColorStop(1, rgba(C.cyan, 0.15));
+        ctx.fillStyle = gr; ctx.fillRect(x0 + i * bw + bw * 0.15, y1 - bh, bw * 0.7, bh);
+      }
+    });
+  }
+  function drawHud() {
+    var x2 = hubs.x2.m || {}, ws = hubs.ws.m || {}, now = new Date(replayNow() * 1000), narrow = W < 520;
+    text("LINEAGE V3 // PROCESSING \u00B7 10 MIN BEHIND", 14, 22, rgba(C.cyan, 0.85), FS, "left", "700");
+    text(pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds()), W - 14, 22, rgba(C.white, 0.8), FS, "right", "600");
+    var l2 = "X2 CPU " + Math.round(x2.cpu || 0) + "%  MEM " + Math.round(x2.mem || 0) + "%";
+    var l3 = "WS CPU " + Math.round(ws.cpu || 0) + "%  MEM " + Math.round(ws.mem || 0) + "%";
+    var more = MK.slice(2).map(function (k) {  // any other machine: a line each (two to a line when narrow)
+      var em = hubs[k].m || {}, s = tag(k) + " CPU " + Math.round(em.cpu || 0) + "%  MEM " + Math.round(em.mem || 0) + "%";
+      return em.fresh === false ? tag(k) + " NO SIGNAL" : s + ((em.gpus || []).length && !narrow ? "  GPU " + Math.round(em.gpu || 0) + "%" : "");
+    });
+    if (narrow) {
+      text(l2 + "   " + l3, 14, 38, rgba(C.white, 0.55), FS - 2);
+      for (var j = 0; j < more.length; j += 2) text(more.slice(j, j + 2).join("   "), 14, 50 + 12 * (j / 2), rgba(C.white, 0.55), FS - 2);
+      return;
+    }
+    text(l2 + "  GPU " + Math.round(x2.gpu || 0) + "%", 14, 40, rgba(C.white, 0.55), FS - 1);
+    text(l3 + "  GPU " + Math.round(ws.gpu || 0) + "%", 14, 55, rgba(C.white, 0.55), FS - 1);
+    more.forEach(function (s, j) { text(s, 14, 70 + 15 * j, rgba(C.white, 0.55), FS - 1); });
+    var y = 40;
+    ((data && data.capacity) || []).slice(0, 2).forEach(function (c) {
+      var w = 90, x = W - 14 - w;
+      text(trunc(c.label, 26).toUpperCase(), x - 8, y, rgba(C.white, 0.5), FS - 2, "right");
+      ctx.fillStyle = rgba(C.white, 0.1); ctx.fillRect(x, y - 7, w, 6);
+      ctx.fillStyle = rgba(c.used > 85 ? C.amber : C.mag, 0.8); ctx.fillRect(x, y - 7, w * Math.min(1, c.used / 100), 6);
+      y += 15;
+    });
+  }
+  function drawTicker() {
+    if (W < 700 || !ticker.length) return;
+    var lh = FS + 4, x = W - 14, y0 = TOP + 20, y1 = H - BOT - 10, total = ticker.length * lh, off = tickY % total;
+    ctx.save(); ctx.beginPath(); ctx.rect(W * 0.76, y0, W * 0.24, y1 - y0); ctx.clip();
+    for (var rep = 0; rep < 3; rep++) {
+      for (var i = 0; i < ticker.length; i++) {
+        var y = y0 + i * lh + rep * total - off;
+        if (y < y0 - lh || y > y1 + lh) continue;
+        var edge = Math.min(1, (y - y0) / 60, (y1 - y) / 60);
+        text(ticker[i], x, y, rgba(C.cyan, 0.2 * Math.max(0, edge)), FS - 2, "right");
+      }
+    }
+    ctx.restore();
+  }
+  function draw() {
+    var g = ctx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.45, Math.max(W, H) * 0.75);
+    g.addColorStop(0, "#170c2e"); g.addColorStop(0.55, "#0a0718"); g.addColorStop(1, "#040308");
+    ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    drawStars();
+    drawTicker();
+    ctx.globalCompositeOperation = "lighter";
+    drawLink(); MK.forEach(function (k) { drawLinks(k); });
+    drawStreams(); drawClusters(); drawPackets(); drawGrads();
+    MK.forEach(function (k) { drawHub(k); });
+    if (hubs.people.on) drawPeople();
+    ctx.globalCompositeOperation = "source-over";
+    drawModels(); drawClusterText(); drawLinkLabel(); drawTimeline(); drawBars(); drawGauge(); drawHud(); drawSel();
+  }
+  function drawPeople() {  // people outside the project: an inner ring, an outer ring of reviewers, a quiet wave between
+    var h = hubs.people, m = h.m || {}, cells = m.cells || [], n = cells.length;
+    var out = 0, back = 0, inv = 0;
+    cells.forEach(function (st) { if (st === "reviewing") out++; else if (st === "returned") back++; else inv++; });
+    var act = out ? 1 : back ? 0.55 : 0.3, rin = h.r, rout = h.r * P_RING, pulse = 0.5 + 0.5 * Math.sin(clock * (0.5 + 0.8 * act));
+    ctx.globalCompositeOperation = "lighter";
+    dot(h.x, h.y, h.r * 1.7, rgba(C.green, 0.04 + 0.05 * pulse));
+    arc(h.x, h.y, rout, 0, 6.2832, rgba(C.green, 0.2), 1);  // the outer ring, where the reviewers sit, with its ticks
+    ctx.lineWidth = 1; ctx.strokeStyle = rgba(C.green, 0.2);
+    for (var i = 0; i < 24; i++) {
+      var ta = i * 6.2832 / 24, t0 = rout - (i % 3 ? 1.5 : 3), t1 = rout + (i % 3 ? 1.5 : 3);
+      line(h.x + Math.cos(ta) * t0, h.y + Math.sin(ta) * t0, h.x + Math.cos(ta) * t1, h.y + Math.sin(ta) * t1);
+    }
+    var mid = (rin + rout) / 2, amp = Math.max(1, (rout - rin) / 2 - 4) * 0.5 * (0.85 + 0.15 * pulse), ph = clock * 0.3 * (0.6 + act);
+    for (var layer = 0; layer < 2; layer++) {  // the wave between the rings, with a fainter counter-wave
+      ctx.beginPath();
+      for (var j = 0; j <= 240; j++) {
+        var a = j / 240 * 6.2832, rr = mid + amp * Math.sin(10 * a + (layer ? Math.PI - ph * 0.8 : ph));
+        var px = h.x + Math.cos(a) * rr, py = h.y + Math.sin(a) * rr;
+        if (j) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = rgba(C.green, layer ? 0.05 : 0.14 + 0.1 * act); ctx.lineWidth = layer ? 0.6 : 0.8; ctx.stroke();
+    }
+    ctx.globalCompositeOperation = "source-over";
+    dot(h.x, h.y, rin * 0.92, "rgba(8,10,24,0.92)");  // the inner ring, like a machine's: returned and out, as shares
+    arc(h.x, h.y, rin, 0, 6.2832, rgba(C.green, 0.16), 3);
+    var f1 = n ? back / n : 0, f2 = n ? out / n : 0, a0 = -Math.PI / 2;
+    if (f1) arc(h.x, h.y, rin, a0, a0 + 6.2832 * f1, rgba(C.green, 0.95), 3);
+    if (f2) arc(h.x, h.y, rin, a0 + 6.2832 * f1, a0 + 6.2832 * (f1 + f2), rgba(C.amber, 0.7 + 0.25 * pulse), 3);
+    arc(h.x, h.y, rin * 0.76, 0, 6.2832, rgba(C.green, 0.12), 1);
+    // returned/out, centred in the disc (returned in green, out in amber), and a quiet caption; the popup has the words
+    var fc = "700 " + (FS + 1) + "px " + MONO, s1 = String(back), s2 = String(out), yb = h.y + FS * 0.15;
+    ctx.font = fc;
+    var w1 = ctx.measureText(s1).width, w0 = ctx.measureText("/").width, x0 = h.x - (w1 + w0 + ctx.measureText(s2).width) / 2;
+    text(s1, x0, yb, rgba(C.green, back ? 0.95 : 0.55), FS + 1, "left", "700");
+    text("/", x0 + w1, yb, rgba(C.white, 0.5), FS + 1, "left", "700");
+    text(s2, x0 + w1 + w0, yb, rgba(C.amber, out ? 0.95 : 0.5), FS + 1, "left", "700");
+    text("PEOPLE", h.x, h.y + FS * 0.95, rgba(C.white, 0.42), Math.max(7, FS - 4), "center", "600");
+    cells.forEach(function (st, i) {  // a reviewer: dim when invited, pulsing while reviewing, steady when returned
+      var c = cellPos(i), cr = Math.max(5, h.r * 0.3);
+      var col = st === "returned" ? C.green : st === "reviewing" ? C.amber : C.cyan;
+      var pz = st === "reviewing" ? 0.5 + 0.5 * Math.sin(clock * 2.4 + i * 1.7) : 0;
+      dot(c.x, c.y, cr + 3 + 3 * pz, rgba(col, st === "invited" ? 0.05 : 0.1 + 0.14 * pz));
+      ctx.fillStyle = "rgba(8,10,24,0.94)"; ctx.beginPath(); ctx.arc(c.x, c.y, cr, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = rgba(col, st === "invited" ? 0.5 : 0.92); ctx.lineWidth = 1.3; ctx.stroke();
+      dot(c.x + cr * 0.15, c.y - cr * 0.1, cr * 0.4, rgba(col, st === "returned" ? 0.9 : st === "reviewing" ? 0.4 + 0.45 * pz : 0.28));
+    });
+  }
+  function drawModels() {
+    modelKeys().forEach(function (k) {
+      var mm = models[k], h = hostHub(k), st = String((mm.m && mm.m.state) || ""), up = st === "Up", docked = (mm.tsc || 1) < 1;
+      var col = up ? C.green : st === "Idle" ? C.cyan : (st === "Loading" || st === "Starting") ? C.amber
+              : st === "Error" ? C.red : C.grey;
+      var sc = brainScale() * (mm.sc || 1), R = 12 * sc, req = (mm.m && mm.m.requests) || 0, busy = up && req > 0, act = mm.act || 0;
+      var dx = h ? mm.x - h.x : 0, dy = h ? mm.y - h.y : 1, L = Math.sqrt(dx * dx + dy * dy) || 1;
+      if (!up) {  // a stopped server: a dashed link to its machine (a running one has live streams instead)
+        if (h && !docked) {
+          ctx.setLineDash([3, 4]); ctx.lineWidth = 1; ctx.strokeStyle = rgba(col, 0.28);
+          line(h.x + dx / L * h.r, h.y + dy / L * h.r, mm.x - dx / L * (R - 2), mm.y - dy / L * (R - 2));
+          ctx.setLineDash([]);
+        }
+      } else {
+        dot(mm.x, mm.y, R + 6 + (2 + 3 * act) * Math.sin(clock * (2 + 4 * act)), rgba(col, 0.08 + 0.1 * act));
+        var nn = 18, gl = Math.max(0.15, (h ? ((h.m && h.m.gpu) || 0) : 100 * act) / 100) * nn, Rr = R + 8;  // neurons, lit by GPU load
+        for (var i = 0; i < nn; i++) {
+          var a = (mm.spin || 0) + i * 6.2832 / nn, on = i < Math.floor(gl) ? 1 : (i < gl ? gl - Math.floor(gl) : 0);
+          dot(mm.x + Math.cos(a) * Rr, mm.y + Math.sin(a) * Rr, 1 + 1.2 * on, on > 0 ? rgba(col, 0.35 + 0.6 * on) : rgba(C.grey, 0.25));
+        }
+      }
+      if (k === "humans") {  // external reviewers: a person, not a brain
+        ctx.fillStyle = "rgba(8,10,24,0.92)"; ctx.strokeStyle = rgba(col, up ? 0.95 : 0.7); ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(mm.x, mm.y - R * 0.38, R * 0.36, 0, 6.2832); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(mm.x, mm.y + R * 0.72, R * 0.72, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+      } else if (BRAIN) {
+        ctx.save(); ctx.translate(mm.x - R, mm.y - R); ctx.scale(sc, sc);
+        ctx.lineJoin = "round"; ctx.lineCap = "round";
+        ctx.fillStyle = "rgba(8,10,24,0.92)"; ctx.fill(BRAIN);
+        ctx.strokeStyle = rgba(col, up ? 0.95 : 0.7); ctx.lineWidth = 1.4 / sc; ctx.stroke(BRAIN);
+        if (busy) { ctx.setLineDash([1.6, 1.8]); ctx.lineDashOffset = -clock * 6; }  // answering requests: the folds fire
+        ctx.strokeStyle = rgba(col, busy ? 0.95 : up ? 0.65 : 0.4); ctx.lineWidth = 1 / sc; ctx.stroke(FOLDS);
+        ctx.setLineDash([]); ctx.lineDashOffset = 0;
+        ctx.restore();
+      } else {
+        arc(mm.x, mm.y, R * 0.8, 0, 6.2832, rgba(col, 0.9), 1.4);
+      }
+      var gpu = Math.round((h && h.m && h.m.gpu) || 0), fs = docked ? Math.max(7, FS - 4) : FS - 2;
+      text(trunc((mm.m && mm.m.name) || "model", 16), mm.x, mm.y + R + fs + (docked ? 4 : 9),
+           rgba(C.white, docked ? 0.42 : 0.6), fs, "center");
+      text(up ? "UP \u00B7 " + (req ? req + " REQ" : h ? "GPU " + gpu + "%" : "CLOUD") : st.toUpperCase(), mm.x,
+           mm.y + R + 2 * fs + (docked ? 5 : 10), rgba(col, docked ? 0.6 : 0.85), fs, "center", "600");
+    });
+    if (dockTop != null) text("STANDBY", 16, dockTop, rgba(C.white, 0.32), Math.max(7, FS - 4), "left", "600");
+  }
+  function drawSel() {  // the selection ring grows in when something is tapped and fades out when it closes
+    if (!ringSel || ringA <= 0.01) return;
+    var t = ringSel, p = null, r = 0;
+    if (t.type === "machine") { p = hubs[t.key]; r = p ? p.r * 1.25 : 0; }
+    else if (t.type === "thread") { p = hubs[t.key] ? threadPos(hubs[t.key], t.i) : null; r = 8; }
+    else if (t.type === "model") { p = models[t.key]; r = modelR(t.key) + 12; }
+    else if (t.type === "people") { p = hubs.people; r = p.r * P_KEEP + 2; }
+    else if (t.type === "star") { p = stars[t.key]; r = 8; }
+    else if (t.type === "link") { p = links[t.key] && links[t.key].mid; r = 18; }
+    else if (t.type === "budget") { p = gauge; r = gauge ? gauge.r + 9 : 0; }
+    else if (clusters[t.key]) { p = clusters[t.key]; r = p.size + 14; }
+    if (!p) return;
+    var e = 1 - Math.pow(1 - ringA, 3);
+    ctx.setLineDash([3, 3]); ctx.lineDashOffset = -clock * 12;
+    arc(p.x, p.y, r * (0.55 + 0.45 * e), 0, 6.2832, rgba(C.white, 0.85 * ringA), 1.3);
+    ctx.setLineDash([]); ctx.lineDashOffset = 0;
+  }
+
+  // ---- interaction: tap a machine, a CPU thread, a model server or a job for its details ----
+  function esc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"]/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch];
+    });
+  }
+  function pbar(pct, col) {
+    pct = Math.max(0, Math.min(100, pct || 0));
+    return '<span class="vp-bar"><span style="width:' + pct.toFixed(0) + '%;background:rgb(' + (col || C.cyan) + ')"></span></span>';
+  }
+  function row(k, v) { return '<div class="vp-r"><span class="vp-k">' + esc(k) + '</span><span class="vp-v">' + v + '</span></div>'; }
+  function ago(sec) { return sec < 90 ? Math.round(sec) + " s" : sec < 5400 ? Math.round(sec / 60) + " min" : (sec / 3600).toFixed(1) + " h"; }
+  function gb(v) { return (v || 0).toFixed(1); }
+  function popMachine(k) {
+    var h = hubs[k];
+    if (!h) return null;
+    var m = h.m || {}, s = '<div class="vp-t">' + (k === "x2" ? "X2 (main compute)" : k === "ws" ? "Workstation" : esc(m.label || m.name || k))
+      + (h.fresh ? "" : ' <span class="vp-warn">no recent update</span>') + '</div>';
+    s += row("CPU", (m.cpu || 0).toFixed(1) + "%" + pbar(m.cpu));
+    s += row("Memory", gb(m.mem_used_gb) + " of " + gb(m.mem_total_gb) + " GB" + pbar(m.mem, C.mag));
+    (m.gpus || []).forEach(function (g) {
+      s += row("GPU", esc(g.name) + ": " + Math.round(g.busy || 0) + "% busy, " + gb(g.mem_used_gb) + " of "
+               + Math.round(g.mem_total_gb || 0) + " GB" + pbar(g.busy, C.green));
+    });
+    s += row("Temperature", m.temp != null ? Math.round(m.temp) + " \u00B0C" : "unavailable");
+    var th = m.threads || [];
+    if (th.length) s += row("Threads", th.length + ", " + th.filter(function (u) { return u >= 50; }).length + " above 50%");
+    if (k === "x2") {
+      s += row("Simulation workers", String(m.sims || 0));
+      s += row("Network / disk", ((m.net || 0) / 1e6).toFixed(1) + " / " + ((m.disk || 0) / 1e6).toFixed(1) + " MB/s");
+    } else if (k !== "ws" && m.net != null) s += row("Network", ((m.net || 0) / 1e6).toFixed(1) + " MB/s");
+    if (m.llm != null) s += row("Model server", esc(m.llm) + ": " + esc(m.llm_detail));
+    if (m.age != null) s += row("Updated", ago(m.age) + " ago");
+    var jobs = [];
+    for (var id in clusters) if (clusters[id].machine === k) jobs.push(clusters[id]);
+    if (jobs.length) {
+      s += '<div class="vp-h">Work here</div>' + jobs.map(function (c) {
+        return '<div class="vp-j">' + esc(c.label) + ' <span class="vp-n">' + (c.total != null
+          ? Math.floor(100 * c.done / c.total) + "%" : esc(c.state)) + '</span></div>';
+      }).join("");
+    }
+    return s;
+  }
+  function popThread(k, i) {
+    if (!hubs[k]) return null;
+    var m = hubs[k].m || {}, u = (m.threads || [])[i] || 0, info = (m.thread_info || [])[i], lane = null;
+    for (var id in clusters) {
+      var c = clusters[id];
+      if (c.machine === k && c.lanes) c.lanes.forEach(function (ln) { if (ln.t === i) lane = c; });
+    }
+    var s = '<div class="vp-t">' + (k === "x2" ? "X2" : k === "ws" ? "Workstation" : esc(m.name || k)) + " \u00B7 cpu" + i + '</div>'
+      + row("Load", u.toFixed(1) + "%" + pbar(u));
+    if (info) {
+      s += '<div class="vp-h">Working on</div>';
+      if (!info.length) s += '<div class="vp-n">Nothing above 3% of a core on this thread in the last sample.</div>';
+      info.forEach(function (e) {
+        s += '<div class="vp-j">' + esc(e.what) + '</div><div class="vp-n">PID ' + e.pid + " \u00B7 " + Math.round(e.cpu)
+          + "% of a core" + (e.rss_gb ? " \u00B7 " + e.rss_gb.toFixed(2) + " GB" : "") + '</div>';
+      });
+    } else {
+      s += '<div class="vp-n">' + (k === "ws" ? "The workstation does not report per-process detail (its runs are inside WSL)."
+                                   : esc(m.name || k) + " reports its load per thread, not per process.")
+        + (lane ? " Drawn as serving <b>" + esc(lane.label) + "</b>, by load." : "") + '</div>';
+    }
+    return s;
+  }
+  function popPeople() {
+    var m = hubs.people.m || {}, cells = m.cells || [], n = { returned: 0, reviewing: 0, invited: 0 };
+    cells.forEach(function (st) { n[st] = (n[st] || 0) + 1; });
+    var s = '<div class="vp-t">People outside the project</div>';
+    s += '<div class="vp-n">Work that waits on people outside the project: asynchronous, and only partly within the operator' + "'" + 's control.</div>';
+    s += row("Returned / out", n.returned + " / " + n.reviewing) + '<div class="vp-n">The hub reads returned/out: ' + n.returned
+      + (n.returned === 1 ? " review" : " reviews") + " returned, " + n.reviewing + " out with reviewers now"
+      + (n.invited ? ", and " + n.invited + " invited, not yet started" : "") + ".</div>";
+    cells.forEach(function (st, i) {
+      var oc = clusters[(m.owner || [])[i] || (m.items || [])[0]];
+      s += row("Reviewer " + (i + 1), (st === "returned" ? "review returned" : st === "reviewing" ? "reviewing now" : "invited")
+               + (oc ? " \u00B7 " + esc(trunc(oc.label, 28)) : ""));
+    });
+    var users = [];
+    for (var id in clusters) if (clusters[id].machine === "people") users.push(clusters[id].label);
+    s += '<div class="vp-h">Work</div>' + (users.length ? users.map(function (u) { return '<div class="vp-j">' + esc(u) + '</div>'; }).join("")
+                                           : '<div class="vp-n">Nothing right now.</div>');
+    return s;
+  }
+  function popModel(k) {
+    var mm = models[k].m || {}, h = (hubs[k] && hubs[k].m) || {};
+    var s = '<div class="vp-t">' + esc(mm.name || "Model server") + " (" + esc(mm.host || k) + ")</div>";
+    s += row("State", esc(mm.state)) + '<div class="vp-n">' + esc(mm.detail) + '</div>';
+    if (mm.requests != null) s += row("Requests in flight", String(mm.requests));
+    if ((mm.cpus || []).length) s += row("CPU threads", "cpu " + mm.cpus.join(", "));
+    (h.gpus || []).forEach(function (g) {
+      s += row("GPU", esc(g.name) + ": " + Math.round(g.busy || 0) + "% busy, " + gb(g.mem_used_gb) + " GB in use" + pbar(g.busy, C.green));
+    });
+    var users = [];
+    for (var id in clusters) {
+      var c = clusters[id];
+      if ((c.ai || []).indexOf(k) >= 0) users.push(c.label + ((c.aiLive || []).indexOf(k) >= 0 ? " (connected now)" : " (marked on the board)"));
+    }
+    (((mm.clients || {}).hosts) || []).forEach(function (hk) {
+      users.push(hk === "ws" ? "the workstation (connected now)" : hk === "x2" ? "a process on the X2 not on the board (connected now)"
+                 : "another machine (connected now)");
+    });
+    s += '<div class="vp-h">Used by</div>' + (users.length ? users.map(function (u) { return '<div class="vp-j">' + esc(u) + '</div>'; }).join("")
+                                                : '<div class="vp-n">Nothing right now.</div>');
+    return s;
+  }
+  function popJob(id) {
+    var c = clusters[id];
+    if (!c) return null;
+    var s = '<div class="vp-t">' + esc(c.name || c.label) + '</div>';
+    s += row("State", esc(c.state) + (c.machine === "people" ? " with people outside the project"
+                                       : " on " + esc(mname(c.machine))));
+    if (c.total != null) s += row("Progress", num(c.done) + " of " + num(c.total) + " (" + Math.floor(100 * c.done / c.total) + "%)"
+                                  + pbar(100 * c.done / c.total));
+    if (c.rate) s += row("Rate", c.rate.toFixed(c.rate < 10 ? 1 : 0) + " jobs an hour");
+    if (c.eta) s += row("Estimated finish", hhmm(c.eta));
+    if (c.lanes && c.lanes.length) s += row("Workers", c.lanes.length + (c.cpus ? " on cpu " + c.lanes.map(function (l) { return l.t; }).join(", ")
+                                                                         : ", estimated from load"));
+    if (c.ai && c.ai.length) s += row("Uses AI", c.ai.map(function (k) {
+      var m2 = (models[k] && models[k].m) || {};
+      return esc(m2.name || k) + " (" + esc(m2.state || "unknown") + ((c.aiLive || []).indexOf(k) >= 0 ? ", connected now" : "") + ")";
+    }).join("; "));
+    if (c.detail) s += '<div class="vp-n" style="margin-top:6px">' + esc(c.detail) + '</div>';
+    return s;
+  }
+  function dateText(epoch) {
+    if (!epoch) return "unknown";
+    var d = new Date(epoch * 1000);
+    return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()] + " " + d.getDate()
+      + ", " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function took(sec) { return sec < 5400 ? Math.round(sec / 60) + " min" : (sec / 3600).toFixed(1) + " h"; }
+  function popStar(id) {
+    var st = stars[id];
+    if (!st) return null;
+    var s = '<div class="vp-t">' + esc(st.name || st.label) + '</div>' + row("Finished", dateText(st.done));
+    s += row("Ran on", esc(mname(st.machine))) + row("Constellation", esc(st.group));
+    if (st.started && st.done && st.done > st.started) s += row("Took", took(st.done - st.started));
+    if (st.detail) s += '<div class="vp-n" style="margin-top:6px">' + esc(st.detail) + '</div>';
+    return s;
+  }
+  function popLink(k) {
+    if (k !== "ws") {  // another machine's link: the rates it reports itself
+      var lm = (hubs[k] && hubs[k].m) || {}, nm = esc(lm.name || k), rt = linkRates(k);
+      return '<div class="vp-t">Link: X2 and ' + nm + '</div>' + row("To " + (lm.name || k), rate(rt[0]))
+        + row("From " + (lm.name || k), rate(rt[1])) + '<div class="vp-n">As ' + nm + ' measures them itself ('
+        + (lm.ts_rx != null ? "its traffic on the private link" : "all its network traffic") + '), reported every 15 s.</div>';
+    }
+    var xm = hubs.x2.m || {};
+    return '<div class="vp-t">The link between the machines</div>' + row("X2 sending", rate(xm.ts_tx)) + row("X2 receiving", rate(xm.ts_rx))
+      + '<div class="vp-n">Traffic on the private link between the two machines: status updates and file copies.</div>';
+  }
+  function popBudget() {
+    if (!budget) return null;
+    var s = '<div class="vp-t">' + esc(budget.name) + ' (X2-equivalent hours)</div>';
+    s += row("Used", budget.used.toFixed(1) + " of " + Math.round(budget.ceiling) + " h" + pbar(100 * budget.used / budget.ceiling, C.green));
+    if (budget.planned) s += row("Planned total", budget.planned.toFixed(1) + " h");
+    s += '<div class="vp-h">Components</div>';
+    (budget.components || []).forEach(function (c) {
+      s += '<div class="vp-j">' + esc(String(c.name).replace(/_/g, " ")) + ' <span class="vp-n">'
+        + (c.used ? c.used.toFixed(1) + " h used" : "not yet recorded") + (c.planned != null ? " of " + c.planned.toFixed(1) + " planned" : "")
+        + '</span></div>';
+    });
+    return s;
+  }
+  function renderPop() {  // opens by growing out of the tapped point; glides when the selection moves
+    if (!sel) { closePop(); return; }
+    var html = sel.type === "machine" ? popMachine(sel.key) : sel.type === "thread" ? popThread(sel.key, sel.i)
+             : sel.type === "model" ? popModel(sel.key) : sel.type === "star" ? popStar(sel.key)
+             : sel.type === "link" ? popLink(sel.key) : sel.type === "budget" ? popBudget()
+             : sel.type === "people" ? popPeople() : popJob(sel.key);
+    if (html == null) { closePop(); return; }
+    popBody.innerHTML = html;
+    var opening = !pop.classList.contains("open");
+    var pw = pop.offsetWidth, ph = pop.offsetHeight, x = sel.x + 14, y = sel.y + 14;
+    if (x + pw > W - 8) x = sel.x - pw - 14;
+    if (y + ph > H - 8) y = H - ph - 8;
+    var left = Math.max(8, Math.min(x, W - pw - 8)), top = Math.max(8, y);
+    pop.style.left = left + "px"; pop.style.top = top + "px";
+    pop.style.transformOrigin = (sel.x - left) + "px " + (sel.y - top) + "px";
+    if (opening) { void pop.offsetWidth; pop.classList.add("open"); }
+  }
+  function closePop() { sel = null; if (pop) pop.classList.remove("open"); }  // shrinks back into the tapped point
+  function hit(x, y) {
+    var best = null, bd = Infinity;
+    function take(d, r, obj) { if (d < r && d < bd) { bd = d; best = obj; } }
+    modelKeys().filter(notMachine).forEach(function (k) {
+      take(Math.hypot(x - models[k].x, y - models[k].y), modelR(k) + 6, { type: "model", key: k });
+    });
+    if (hubs.people.on) take(Math.hypot(x - hubs.people.x, y - hubs.people.y), hubs.people.r * P_KEEP, { type: "people", key: "people" });
+    MK.forEach(function (k) {
+      var h = hubs[k];
+      if (models[k]) take(Math.hypot(x - models[k].x, y - models[k].y), modelR(k) + 6, { type: "model", key: k });
+      for (var i = 0; i < h.threads.length; i++) {
+        var p = threadPos(h, i);
+        take(Math.hypot(x - p.x, y - p.y), 11, { type: "thread", key: k, i: i });
+      }
+      take(Math.hypot(x - h.x, y - h.y), h.r * 1.05, { type: "machine", key: k });
+    });
+    for (var id in clusters) {
+      var c = clusters[id];
+      take(Math.hypot(x - c.x, y - c.y), c.size + 10, { type: "job", key: id });
+    }
+    if (gauge && budget) take(Math.hypot(x - gauge.x, y - gauge.y), gauge.r + 8, { type: "budget", key: "a6" });
+    MK.slice(1).forEach(function (k) {
+      var mid = links[k] && links[k].mid;
+      if (mid) take(Math.hypot(x - mid.x, y - mid.y), 22, { type: "link", key: k });
+    });
+    tlHits.forEach(function (t) { take(Math.hypot(x - t.x, y - t.y), 10, { type: "job", key: t.id }); });
+    starList.forEach(function (st) { if (!st.grad) take(Math.hypot(x - st.x, y - st.y), 7, { type: "star", key: st.id }); });
+    return best;
+  }
+  function at(ev) { var r = cv.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
+  cv.addEventListener("click", function (ev) {
+    var p = at(ev), t = hit(p.x, p.y);
+    if (!t) { closePop(); return; }
+    if (!sel || sel.type !== t.type || sel.key !== t.key || sel.i !== t.i) ringA = 0;
+    t.x = p.x; t.y = p.y; sel = t; renderPop();
+  });
+  cv.addEventListener("mousemove", function (ev) { var p = at(ev); cv.style.cursor = hit(p.x, p.y) ? "pointer" : "default"; });
+  document.getElementById("viz-pop-x").addEventListener("click", closePop);
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") closePop(); });
+
+  function frame(ts) {
+    raf = 0;
+    if (!shown()) return;
+    resize();
+    var dt = last ? Math.min(0.1, (ts - last) / 1000) : 0.016;
+    last = ts;
+    if (reduce.matches) dt *= 0.15;
+    clock += dt;
+    step(dt); draw();
+    raf = requestAnimationFrame(frame);
+  }
+  function kick() { if (!raf && shown()) { last = 0; raf = requestAnimationFrame(frame); } }
+
+  window.__lineageProc = {  // for the tab transition: where each running job sits, even while this view is hidden
+    canvas: cv,
+    prepare: function (w, h) {
+      if (W && H) return;
+      W = w; H = h; DPR = Math.min(2, window.devicePixelRatio || 1);
+      cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      layout(); seedAmbient();
+      for (var id in clusters) { if (clusters[id].tx != null) { clusters[id].x = clusters[id].tx; clusters[id].y = clusters[id].ty; } }
+    },
+    items: function () {
+      var out = [];
+      for (var id in clusters) {
+        var c = clusters[id];
+        if (c.x == null || c.total == null) continue;
+        out.push({ id: id, x: c.x, y: c.y, size: c.size, col: STATE_COL[c.state] || C.cyan });
+      }
+      return out;
+    },
+    flash: function (id) { var c = clusters[id]; if (c) { c.wave = 1; c.flash = 1; } },
+    running: function () {  // the jobs running now, so the framework view can pulse the parts they work on
+      var out = {};
+      for (var id in clusters) if (clusters[id].state === "running") out[id] = clusters[id].machine || "ws";
+      return out;
+    }
+  };
+  setOpen(true, false);
+  window.addEventListener("resize", function () { resize(); kick(); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) { poll(); kick(); } });
+  poll();
+  setInterval(poll, 60000); setInterval(replayTick, 1000);
+})();
+</script>
+<script>
+(function () {
+  var wrap = document.getElementById("viz"), cv = document.getElementById("fw-canvas");
+  if (!wrap || !cv || !cv.getContext) return;
+  var ctx = cv.getContext("2d");
+  var tabP = document.getElementById("tab-proc"), tabF = document.getElementById("tab-fw");
+  var pop = document.getElementById("fw-pop"), popBody = document.getElementById("fw-pop-body");
+  var TABKEY = "lineagePublicTab";
+  var C = { cyan: "90,209,255", mag: "196,110,255", amber: "246,191,96", red: "255,110,110", green: "90,230,170",
+            white: "230,236,255", grey: "130,130,165", gold: "255,214,130", blue: "150,175,255" };
+  var LAYER_COL = { core: C.gold, law: C.mag, machine: C.cyan, evidence: C.green, wall: C.amber, defense: C.blue, phase: C.cyan };
+  var LAYER_NAME = { core: "the claims", law: "the law", machine: "the machine", evidence: "the evidence", wall: "the wall",
+                     defense: "the outer defenses", phase: "the plan" };
+  var SECTORS = ["theory", "instrument", "runs", "sensitivity", "governance"];
+  var SECTOR_NAME = { theory: "THEORY", instrument: "INSTRUMENT", runs: "THE RUNS", sensitivity: "SENSITIVITY", governance: "GOVERNANCE" };
+  var RINGS = { center: 0, core: 0.155, core2: 0.235, law: 0.335, law2: 0.405, machine: 0.51, evidence: 0.625, wall: 0.735,
+                defense: 0.835, phase: 0.95 };
+  var SIZE = { center: 0.06, core: 0.03, core2: 0.013, law: 0.017, law2: 0.008, machine: 0.022, evidence: 0.022, defense: 0.02 };
+  var STATE_TEXT = { online: "online: exists and is verified", active: "active: in progress",
+                     ready: "ready: everything it needs is online", planned: "planned: not started",
+                     sealed: "sealed: a result exists, sealed until cleared", superseded: "superseded: replaced, kept as a scar",
+                     unknown: "unknown: its source could not be read" };
+  var RANK = { unknown: 0, planned: 1, superseded: 1, ready: 2, active: 3, sealed: 4, online: 5 };
+  var MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+  var W = 0, H = 0, DPR = 1, CX = 0, CY = 0, R = 100, RX = 100, RY = 100, FS = 10, raf = 0, last = 0, clock = 0, busy = false, bootT = 0;
+  var fw = null, nodes = {}, list = [], edges = [], prev = null, pulses = [], sel = null, ringSel = null, ringA = 0;
+  function P(a, k) { return { x: CX + Math.cos(a) * k * RX, y: CY + Math.sin(a) * k * RY }; }  // a point on ring k (an ellipse)
+
+  // ---- 3D: the citadel as concentric glass shells. The flat view is the same citadel seen from straight above with
+  // every part on the equator, so the toggle tilts the camera down while each part rises to its place on its shell. ----
+  var MODEKEY = "lineageFwMode", mode3d = false, mT = 0, me = 0, yaw = 0, pitch = 0.5, level = 0, zoomCur = 1;
+  var yawE = 0, pitE = Math.PI / 2, zoomE = 1, DCAM = 3.2, drag = null, pointers = {}, pinch0 = null, moved = false;
+  var yawGoal = null, wheelAcc = 0, ctlEl = document.getElementById("fw-ctl"), ctlW = 0, ctlDirty = true;
+  // Each stop of the zoom: the shell in focus lies between inner and k; parts outside it fade, parts inside it dim.
+  var FOCUS = [{ name: "THE WHOLE CITADEL", zoom: 1, k: 1.2, inner: 0, rings: ["machine", "evidence", "defense"] },
+               { name: "THE WALL AND DEFENSES", zoom: 1.12, k: 0.9, inner: 0.69, rings: ["defense"] },
+               { name: "THE EVIDENCE", zoom: 1.42, k: 0.68, inner: 0.57, rings: ["evidence"] },
+               { name: "THE MACHINE", zoom: 1.75, k: 0.56, inner: 0.46, rings: ["machine"] },
+               { name: "THE LAW", zoom: 2.4, k: 0.45, inner: 0.29, rings: ["law", "law2"] },
+               { name: "THE CLAIMS", zoom: 3.5, k: 0.28, inner: 0, rings: ["core", "core2"] }];
+  var SHELLS = [[0.28, C.gold], [0.45, C.mag], [0.56, C.cyan], [0.68, C.green], [0.9, C.blue]];
+  function smooth(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+  function wrapA(a) { return ((a + Math.PI) % 6.2832 + 6.2832) % 6.2832 - Math.PI; }
+  function hsh3(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; }
+  function proj3(x, y, z) {  // turn about the vertical axis, then the camera's pitch, then perspective
+    var cy = Math.cos(yawE), sy = Math.sin(yawE), cp = Math.cos(pitE), sp = Math.sin(pitE);
+    var x1 = x * cy + z * sy, z1 = -x * sy + z * cy, y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+    var f = DCAM / (DCAM - z2), S = R * zoomE;
+    return { x: CX + x1 * S * f, y: CY - y2 * S * f, z: z2, f: f };
+  }
+  function sphere(a, k, lat) { var cl = Math.cos(lat); return [k * cl * Math.cos(a), k * Math.sin(lat), k * cl * Math.sin(a)]; }
+  function screenOf(a, k, lat, flat, ring) {
+    var q = sphere(a, k, lat * me);
+    if (ring === "phase") {  // the plan's ring tilts off the equator as the citadel opens out
+      var inc = 0.35 * me, y0 = q[1];
+      q = [q[0], y0 * Math.cos(inc) - q[2] * Math.sin(inc), y0 * Math.sin(inc) + q[2] * Math.cos(inc)];
+    }
+    var pr = proj3(q[0], q[1], q[2]), w = smooth(0, 0.35, me);
+    return { x: flat.x + (pr.x - flat.x) * w, y: flat.y + (pr.y - flat.y) * w, z: pr.z, f: pr.f, w: w };
+  }
+  function update3d(dt) {
+    var target = mode3d ? 1 : 0, speed = reduce.matches ? 1e3 : 1 / 1.3;
+    mT += Math.sign(target - mT) * Math.min(Math.abs(target - mT), dt * speed);
+    me = smooth(0, 1, mT);
+    if (mode3d && !drag && !sel && !reduce.matches && yawGoal == null) yaw += dt * 0.05;  // a slow turn
+    if (yawGoal != null) {  // swing a tapped part round to face the viewer
+      var d = wrapA(yawGoal - yaw);
+      yaw += d * Math.min(1, dt * 4);
+      if (Math.abs(d) < 0.003) yawGoal = null;
+    }
+    if (mT >= 1) yaw = wrapA(yaw);  // so the way back to flat never unwinds whole turns
+    zoomCur += (FOCUS[level].zoom - zoomCur) * Math.min(1, dt * 3);
+    yawE = yaw * me; pitE = Math.PI / 2 + (pitch - Math.PI / 2) * me; zoomE = 1 + (zoomCur - 1) * me;
+  }
+  function updateAll() {
+    var fk = FOCUS[level].k, fin = FOCUS[level].inner;
+    list.forEach(function (n) {
+      if (n.fx == null) return;
+      if (me <= 0) { n.x = n.fx; n.y = n.fy; n.z = 0; n.rd = n.r; n.vis = 1; return; }
+      var k = n.k || 0, sc = screenOf(n.a || 0, k, n.lat || 0, { x: n.fx, y: n.fy }, n.ring);
+      var grow = Math.min(n.ring === "center" ? 1.6 : 2.1, sc.f * Math.pow(zoomE, 0.7));
+      n.x = sc.x; n.y = sc.y; n.z = sc.z; n.rd = n.r * (1 + (grow - 1) * sc.w);
+      var front = k < 0.06 ? 1 : Math.max(0, Math.min(1, (n.z / k + 1) / 2)), outside = k > fk + 0.01, inside = k >= 0.06 && k < fin;
+      n.vis = 1 + ((0.4 + 0.6 * front) * (outside ? 0.1 : inside ? 0.55 : 1) - 1) * me;
+    });
+  }
+  function segPts(n, k, a0, a1) {
+    var pts = [], steps = Math.max(2, Math.ceil((a1 - a0) / 0.06));
+    for (var i = 0; i <= steps; i++) { var a = a0 + (a1 - a0) * i / steps; pts.push(screenOf(a, k, 0, P(a, k), n.ring)); }
+    return pts;
+  }
+  function segArc(n, k, a0, a1, style, w) {  // a wall or plan segment, flat or on its ring in the shells
+    if (me <= 0.001) { earc(k, a0, a1, style, w); return; }
+    ctx.strokeStyle = style; ctx.lineWidth = w; ctx.beginPath();
+    segPts(n, k, a0, a1).forEach(function (q, i) { if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+    ctx.stroke();
+  }
+  function drawShells() {
+    if (me <= 0.01) return;
+    var c = proj3(0, 0, 0), fk = FOCUS[level].k;
+    SHELLS.forEach(function (sh) {
+      var k = sh[0], col = sh[1], al = me * (k > fk + 0.01 ? 0.22 : 1);
+      var rr = R * zoomE * k * DCAM / Math.sqrt(DCAM * DCAM - k * k);
+      if (rr > Math.max(W, H) * 1.6) return;  // zoomed far inside it
+      var g = ctx.createRadialGradient(c.x - rr * 0.3, c.y - rr * 0.35, rr * 0.05, c.x, c.y, rr);
+      g.addColorStop(0, rgba(C.white, 0.03 * al)); g.addColorStop(0.75, rgba(col, 0.015 * al)); g.addColorStop(1, rgba(col, 0.085 * al));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, rr, 0, 6.2832); ctx.fill();
+      arc(c.x, c.y, rr, 0, 6.2832, rgba(col, 0.32 * al), 1.1);
+      arc(c.x, c.y, rr * 0.93, -2.55, -1.95, rgba(C.white, 0.16 * al), 2);  // a glint on the glass
+      var lines = [];
+      [-0.7, 0, 0.7].forEach(function (lat) {
+        var pts = [];
+        for (var i = 0; i <= 48; i++) pts.push(sphere(i * 6.2832 / 48, k, lat));
+        lines.push(pts);
+      });
+      for (var mi = 0; mi < 6; mi++) {
+        var mp = [], lon = mi * Math.PI / 6;
+        for (var j = 0; j <= 24; j++) mp.push(sphere(lon, k, -Math.PI / 2 + j * Math.PI / 24));
+        lines.push(mp);
+      }
+      ["back", "front"].forEach(function (side) {  // the far side of the glass faint, the near side brighter
+        ctx.beginPath();
+        lines.forEach(function (pts) {
+          var prv = null;
+          pts.forEach(function (q3) {
+            var q = proj3(q3[0], q3[1], q3[2]);
+            if (prv && ((prv.z + q.z > 0) === (side === "front"))) { ctx.moveTo(prv.x, prv.y); ctx.lineTo(q.x, q.y); }
+            prv = q;
+          });
+        });
+        ctx.strokeStyle = rgba(col, (side === "front" ? 0.09 : 0.035) * al); ctx.lineWidth = 0.8; ctx.stroke();
+      });
+    });
+  }
+  function earc(k, a0, a1, style, w) {
+    ctx.strokeStyle = style; ctx.lineWidth = w; ctx.beginPath();
+    ctx.ellipse(CX, CY, Math.max(0.1, k * RX), Math.max(0.1, k * RY), 0, a0, a1); ctx.stroke();
+  }
+
+  function rgba(c, a) { return "rgba(" + c + "," + Math.max(0, Math.min(1, a)).toFixed(3) + ")"; }
+  function dot(x, y, r, f) { ctx.fillStyle = f; ctx.beginPath(); ctx.arc(x, y, Math.max(0.1, r), 0, 6.2832); ctx.fill(); }
+  function arc(x, y, r, a0, a1, s, w) { ctx.strokeStyle = s; ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, Math.max(0.1, r), a0, a1); ctx.stroke(); }
+  function line(x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+  function text(s, x, y, col, size, align, weight) {
+    ctx.font = (weight || "500") + " " + size + "px " + MONO; ctx.textAlign = align || "left"; ctx.fillStyle = col; ctx.fillText(s, x, y);
+  }
+  function trunc(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; }
+  function esc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"]/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]; });
+  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function num(n) { return Math.round(n || 0).toLocaleString(); }
+  function hhmm(epoch) { var d = new Date(epoch * 1000); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function bez(a, q, b, t) {
+    var u = 1 - t;
+    return { x: u * u * a.x + 2 * u * t * q.x + t * t * b.x, y: u * u * a.y + 2 * u * t * q.y + t * t * b.y };
+  }
+
+  // ---- tabs: the processing view and this one share the panel ----
+  var transBusy = false, reduce = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+  function setTab(t, persist) {
+    var from = wrap.getAttribute("data-tab");
+    if (transBusy || from === t && persist) return;
+    if (persist && from !== t && startTransition(from, t)) return;
+    applyTab(t, persist);
+  }
+  function applyTab(t, persist) {
+    wrap.setAttribute("data-tab", t);
+    tabP.setAttribute("aria-selected", t === "proc" ? "true" : "false");
+    tabF.setAttribute("aria-selected", t === "fw" ? "true" : "false");
+    if (persist) { try { localStorage.setItem(TABKEY, t); } catch (e) {} }
+    if (t !== "fw") closePop();
+    window.dispatchEvent(new Event("resize"));
+    if (t === "fw") { poll(); kick(); }
+  }
+  tabP.addEventListener("click", function () { setTab("proc", true); });
+  tabF.addEventListener("click", function () { setTab("fw", true); });
+  function shown() { return !document.hidden && cv.offsetWidth > 0 && cv.offsetHeight > 0; }
+
+  // ---- geometry: rings from the centre outward, five sectors clockwise from the top ----
+  function resize() {
+    var w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    if (w === W && h === H && cv.width === Math.round(w * DPR)) return;
+    W = w; H = h;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    layout();
+  }
+  function ringOf(n) {
+    if (n.id === "claims") return "center";
+    if (n.layer === "core") return n.parent && n.parent !== "claims" ? "core2" : "core";
+    if (n.layer === "law") return n.parent && n.parent.indexOf("dec.") === 0 ? "law2" : "law";
+    return n.layer;
+  }
+  function sectorSpan(sec) {
+    var span = 6.2832 / SECTORS.length, i = SECTORS.indexOf(sec);
+    if (i < 0) i = SECTORS.length - 1;
+    var a0 = -Math.PI / 2 - span / 2 + i * span;
+    return [a0, a0 + span];
+  }
+  function layout() {
+    if (!W || !H) return;
+    // The citadel is an ellipse: R is the smaller half-axis, and the longer one stretches up to 1.3 times it.
+    var top = 46, bottom = 24, aw = W / 2 - 8, ah = (H - top - bottom) / 2 - 4;
+    R = Math.max(40, Math.min(aw, ah)); RX = Math.min(aw, R * 1.3); RY = Math.min(ah, R * 1.3);
+    CX = W / 2; CY = top + (H - top - bottom) / 2; FS = Math.max(8, Math.min(11, R / 30));
+    var groups = {}, core = [];
+    list.forEach(function (n) {
+      n.ring = ringOf(n);
+      if (n.ring === "core") { core.push(n); return; }
+      if (n.ring === "wall" || n.ring === "phase" || n.ring === "center" || n.ring === "core2") return;
+      var k = n.ring + "|" + n.sector;
+      (groups[k] = groups[k] || []).push(n);
+    });
+    function put(n, a, k, size) {
+      var pt = P(a, k);
+      n.a = a; n.k = k; n.x = pt.x; n.y = pt.y; n.r = size;
+    }
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k], ring = k.split("|")[0], span = sectorSpan(k.split("|")[1]), pd = (span[1] - span[0]) * 0.06;
+      g.forEach(function (n, i) {
+        var a = span[0] + pd + (i + 0.5) * (span[1] - span[0] - 2 * pd) / g.length, kk = RINGS[ring];
+        if ((ring === "law2" || ring === "law") && g.length > 9) kk += i % 2 ? 0.024 : -0.024;  // stagger a crowded arc
+        put(n, a, kk, Math.max(ring === "law2" ? 2.2 : 3.6, SIZE[ring] * R));
+      });
+    });
+    // The claims core: its families evenly around the centre (in sector order), each package fanned around its family.
+    core.sort(function (a, b) { return SECTORS.indexOf(a.sector) - SECTORS.indexOf(b.sector); });
+    core.forEach(function (n, i) { put(n, -Math.PI / 2 + i * 6.2832 / core.length, RINGS.core, Math.max(4, SIZE.core * R)); });
+    core.forEach(function (fam) {
+      var kids = list.filter(function (n) { return n.parent === fam.id && n.ring === "core2"; }), m = kids.length;
+      var step = Math.min(0.17, 1.5 / Math.max(1, m));
+      kids.forEach(function (n, j) {
+        put(n, fam.a + (j - (m - 1) / 2) * step, RINGS.core2 + (j % 2 ? 0.03 : -0.01), Math.max(2.6, SIZE.core2 * R));
+      });
+    });
+    var c = nodes["claims"];
+    if (c) { c.x = CX; c.y = CY; c.r = Math.max(12, SIZE.center * R); c.a = -Math.PI / 2; c.k = 0; }
+    ["wall", "phase"].forEach(function (ring) {
+      var g = list.filter(function (n) { return n.ring === ring; }), seg = 6.2832 / Math.max(1, g.length);
+      g.forEach(function (n, i) {
+        n.a0 = -Math.PI / 2 + i * seg + seg * 0.07; n.a1 = -Math.PI / 2 + (i + 1) * seg - seg * 0.07;
+        put(n, (n.a0 + n.a1) / 2, RINGS[ring], 6);
+      });
+    });
+    list.forEach(function (n) {  // the flat position, and a stable latitude for the shells
+      n.fx = n.x; n.fy = n.y;
+      n.lat = n.ring === "wall" || n.ring === "phase" || n.ring === "center" ? 0
+            : (hsh3(n.id) - 0.5) * (n.ring === "law2" || n.ring === "core2" ? 1.5 : 1.0);
+    });
+    updateAll();
+  }
+
+  // ---- data: the map, rebuilt every 10 minutes on the workstation; progress refreshed by the board ----
+  function apply(d) {
+    fw = d;
+    if (!d || !d.nodes || !d.nodes.length) { list = []; return; }
+    var old = nodes;
+    nodes = {};
+    d.nodes.forEach(function (n) {
+      var m = old[n.id] || { flare: 0, ph: Math.random() * 6.28, delay: 0, shown: 0 };
+      for (var k in n) m[k] = n[k];
+      nodes[n.id] = m;
+    });
+    list = d.nodes.map(function (n) { return nodes[n.id]; });
+    edges = (d.edges || []).filter(function (e) { return nodes[e.from] && nodes[e.to] && e.kind !== "precedes"; })
+      .map(function (e) { return { e: e, a: nodes[e.from], b: nodes[e.to], acc: 2 + Math.random() * 14 }; });
+    if (!prev) {  // first load: the citadel boots from the centre outward
+      var order = ["center", "core", "core2", "law", "law2", "machine", "evidence", "wall", "defense", "phase"];
+      list.forEach(function (n) { n.delay = 0.2 + 0.3 * order.indexOf(ringOf(n)) + Math.random() * 0.3; n.shown = 0; });
+      bootT = 0;
+    } else {  // coming online: a part whose state rose flares, and current runs to everything it unlocks
+      list.forEach(function (n) {
+        var was = prev[n.id];
+        if (was && RANK[n.state] > RANK[was]) {
+          n.flare = 1;
+          edges.forEach(function (ed) {
+            if (ed.a !== n) return;
+            for (var k = 0; k < 3; k++) pulses.push({ ed: ed, t: -k * 0.15, dur: 1.4, col: LAYER_COL[n.layer], bright: 1 });
+          });
+        }
+      });
+    }
+    prev = {};
+    list.forEach(function (n) { prev[n.id] = n.state; });
+    layout();
+    if (sel) renderPop();
+  }
+  function poll(force) {
+    if (busy || document.hidden || (!force && wrap.getAttribute("data-tab") !== "fw")) return;
+    busy = true;
+    fetch(FEED + "framework.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (d) { apply(d); kick(); }).catch(function () {}).then(function () { busy = false; });
+  }
+
+  // ---- motion ----
+  function step(dt) {
+    bootT += dt;
+    list.forEach(function (n) {
+      if (bootT >= n.delay) n.shown = Math.min(1, n.shown + dt * 2.5);
+      if (n.flare > 0) n.flare = Math.max(0, n.flare - dt * 0.6);
+    });
+    edges.forEach(function (ed) {  // verified links carry a pulse of current now and then
+      if (ed.e.state !== "verified" || ed.e.kind === "records") return;
+      ed.acc -= dt;
+      if (ed.acc <= 0) {
+        ed.acc = 8 + Math.random() * 16;
+        if (pulses.length < 160 && Math.min(ed.a.shown, ed.b.shown) > 0.9) pulses.push({ ed: ed, t: 0, dur: 1.8, col: LAYER_COL[ed.a.layer], bright: 0.55 });
+      }
+    });
+    for (var i = pulses.length - 1; i >= 0; i--) { pulses[i].t += dt / pulses[i].dur; if (pulses[i].t >= 1) pulses.splice(i, 1); }
+    if (sel) { ringSel = sel; ringA = Math.min(1, ringA + dt * 6); } else ringA = Math.max(0, ringA - dt * 6);
+  }
+
+  // ---- drawing ----
+  function ctrlPt(a, b) {  // links bend toward the centre, so they stay inside the citadel
+    var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    return { x: mx + (CX - mx) * 0.28, y: my + (CY - my) * 0.28 };
+  }
+  function touches(ed) { return !!sel && (ed.a.id === sel.id || ed.b.id === sel.id); }
+  function drawGuides() {
+    ["core", "law", "machine", "evidence", "defense"].forEach(function (k) { earc(RINGS[k], 0, 6.2832, rgba(C.white, 0.035), 1); });
+    SECTORS.forEach(function (sec) {
+      var sp = sectorSpan(sec), mid = (sp[0] + sp[1]) / 2, p0 = P(sp[0], 0.2), p1 = P(sp[0], 0.9), pl = P(mid, 0.893);
+      ctx.strokeStyle = rgba(C.white, 0.05); ctx.lineWidth = 1;
+      line(p0.x, p0.y, p1.x, p1.y);
+      text(SECTOR_NAME[sec], pl.x, pl.y + 3, rgba(C.white, 0.24), Math.max(7, FS - 2), "center", "600");
+    });
+    var la = sectorSpan("theory")[0] - 0.03;
+    [["law", "THE LAW"], ["machine", "THE MACHINE"], ["evidence", "THE EVIDENCE"], ["wall", "THE WALL"], ["defense", "DEFENSES"]].forEach(function (e) {
+      var pt = P(la, RINGS[e[0]]);
+      ctx.save(); ctx.translate(pt.x, pt.y); ctx.rotate(la + Math.PI / 2);
+      text(e[1], 0, -4, rgba(C.white, 0.2), Math.max(7, FS - 3), "center", "600");
+      ctx.restore();
+    });
+  }
+  function drawEdges() {
+    edges.forEach(function (ed) {
+      var a = ed.a, b = ed.b, vis = Math.min(a.shown * (a.vis == null ? 1 : a.vis), b.shown * (b.vis == null ? 1 : b.vis));
+      if (vis <= 0.01) return;
+      var hi = touches(ed);
+      if (ed.e.kind === "records" && !hi) return;
+      var dim = sel && !hi ? 0.35 : 1, col = LAYER_COL[a.layer], q = ctrlPt(a, b), st = ed.e.state;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(q.x, q.y, b.x, b.y);
+      if (st === "verified") {
+        ctx.setLineDash([]); ctx.strokeStyle = rgba(col, (hi ? 0.6 : 0.15) * vis * dim); ctx.lineWidth = hi ? 1.6 : 1;
+      } else if (st === "active") {
+        ctx.setLineDash([3, 6]); ctx.lineDashOffset = -clock * 26; ctx.strokeStyle = rgba(col, (hi ? 0.85 : 0.45) * vis * dim); ctx.lineWidth = hi ? 1.6 : 1.1;
+      } else {
+        ctx.setLineDash([2, 6]); ctx.lineDashOffset = 0; ctx.strokeStyle = rgba(C.grey, (hi ? 0.55 : 0.12) * vis * dim); ctx.lineWidth = 1;
+      }
+      ctx.stroke();
+    });
+    ctx.setLineDash([]); ctx.lineDashOffset = 0;
+  }
+  function drawPulses() {
+    pulses.forEach(function (p) {
+      if (p.t < 0) return;
+      var a = p.ed.a, b = p.ed.b, q = ctrlPt(a, b), f = Math.sin(Math.PI * Math.min(1, p.t));
+      for (var k = 0; k < 3; k++) {
+        var t = p.t - k * 0.04;
+        if (t < 0) continue;
+        var pt = bez(a, q, b, t);
+        if (k === 0) dot(pt.x, pt.y, 4, rgba(p.col, 0.16 * f * p.bright));
+        dot(pt.x, pt.y, k === 0 ? 1.6 : 1, rgba(p.col, 0.9 * f * p.bright * (1 - k * 0.3)));
+      }
+    });
+  }
+  function lock(x, y, col) {
+    ctx.strokeStyle = col; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(x, y - 2.6, 2.4, Math.PI, 0); ctx.stroke();
+    ctx.fillStyle = col; ctx.fillRect(x - 3.2, y - 1.6, 6.4, 4.8);
+  }
+  function drawWall() {
+    list.forEach(function (n) {
+      if (n.ring !== "wall" || n.shown <= 0.01) return;
+      var k = RINGS.wall, a = n.shown * (n.vis == null ? 1 : n.vis), st = n.state, d = n.detail || {};
+      if (st === "planned" || st === "unknown") {
+        ctx.setLineDash([3, 4]); segArc(n, k, n.a0, n.a1, rgba(C.grey, 0.35 * a), 4); ctx.setLineDash([]);
+      } else {
+        if (n.busy) busyHalo(n, k, C.amber, a, 12);
+        segArc(n, k, n.a0, n.a1, rgba(C.amber, (st === "online" ? 0.85 : 0.5) * a), 5);
+        if (d.after === "running") {  // the after-run check is sweeping this gate now
+          var sw = (clock * 0.5 + n.ph) % 1, sa = n.a0 + (n.a1 - n.a0) * sw;
+          segArc(n, k, Math.max(n.a0, sa - 0.04), Math.min(n.a1, sa + 0.04), rgba(C.white, 0.85 * a), 5);
+        }
+        if (n.human) humanSeg(n, k, a);
+        if (st === "sealed") lock(n.x, n.y + 3, rgba(C.white, 0.9 * a));
+      }
+      if (n.flare > 0) segArc(n, k, n.a0, n.a1, rgba(C.white, 0.6 * n.flare), 9);
+      if (me > 0.5) {  // in the shells, gate names show on the near side when the wall is in focus
+        if ((level === 1 || level === 0 && R > 200) && n.z > 0) {
+          var ga = Math.atan2(n.y - CY, n.x - CX);
+          text(n.label, n.x + Math.cos(ga) * 13, n.y + Math.sin(ga) * 13 + 3, rgba(C.white, 0.5 * a), Math.max(7, FS - 3), "center");
+        }
+      } else if (R > 200) text(n.label, n.x + Math.cos(n.a) * 13, n.y + Math.sin(n.a) * 13 + 3, rgba(C.white, 0.42 * a), Math.max(7, FS - 3), "center");
+    });
+  }
+  function drawPhases() {
+    list.forEach(function (n) {
+      if (n.ring !== "phase" || n.shown <= 0.01) return;
+      var k = RINGS.phase, a = n.shown * (n.vis == null ? 1 : n.vis), st = n.state;
+      if (n.busy) busyHalo(n, k, C.cyan, a, 10);
+      if (st === "online") segArc(n, k, n.a0, n.a1, rgba(C.green, 0.75 * a), 3);
+      else if (st === "active") segArc(n, k, n.a0, n.a1, rgba(C.cyan, (0.45 + 0.3 * Math.sin(clock * 2.5)) * a), 3);
+      else { ctx.setLineDash([2, 5]); segArc(n, k, n.a0, n.a1, rgba(C.grey, 0.4 * a), 2); ctx.setLineDash([]); }
+      if (n.flare > 0) segArc(n, k, n.a0, n.a1, rgba(C.white, 0.6 * n.flare), 6);
+    });
+  }
+  function busyRipple(x, y, r, col, a, ph) {  // in progress: rings that keep spreading out of the part
+    var breath = 0.5 + 0.5 * Math.sin(clock * 2.6 + ph);
+    dot(x, y, r * 2, rgba(col, (0.05 + 0.09 * breath) * a));
+    if (reduce.matches) { arc(x, y, r * 2.2, 0, 6.2832, rgba(col, 0.55 * a), 1.2); return; }
+    for (var k = 0; k < 2; k++) {
+      var t = (clock * 0.42 + ph / 6.2832 + k * 0.5) % 1;
+      arc(x, y, r * (1.35 + 2.5 * t), 0, 6.2832, rgba(col, 0.7 * (1 - t) * (1 - t) * a), 0.5 + 1.3 * (1 - t));
+    }
+  }
+  function humanWave(x, y, r, a, ph) {  // under outside review: the people hub's living wave, as an outline
+    var t = reduce.matches ? 0 : clock * 0.9 + ph, mid = r * 2 + 3, amp = Math.max(1.6, r * 0.32);
+    for (var layer = 0; layer < 2; layer++) {
+      ctx.beginPath();
+      for (var j = 0; j <= 96; j++) {
+        var q = j / 96 * 6.2832, rr = mid + amp * Math.sin(7 * q + (layer ? Math.PI - t * 0.8 : t));
+        if (j) ctx.lineTo(x + Math.cos(q) * rr, y + Math.sin(q) * rr); else ctx.moveTo(x + Math.cos(q) * rr, y + Math.sin(q) * rr);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = rgba(C.green, (layer ? 0.16 : 0.7) * a); ctx.lineWidth = layer ? 1 : 1.3; ctx.stroke();
+    }
+  }
+  function humanSeg(n, k, a) {  // under outside review, for a gate: the wave runs along its segment, just outside it
+    var span = n.a1 - n.a0, steps = Math.max(16, Math.ceil(span / 0.008)), lobes = Math.max(2, Math.round(span / 0.045));
+    var t = reduce.matches ? 0 : clock * 0.9 + (n.ph || 0), px = 1 / Math.max(40, RX), k0 = k + 9 * px;
+    for (var layer = 0; layer < 2; layer++) {
+      ctx.beginPath();
+      for (var i = 0; i <= steps; i++) {
+        var u = i / steps, ang = n.a0 + span * u, kk = k0 + 4 * px * Math.sin(lobes * 6.2832 * u + (layer ? Math.PI - t * 0.8 : t));
+        var q = screenOf(ang, kk, 0, P(ang, kk), n.ring);
+        if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y);
+      }
+      ctx.strokeStyle = rgba(C.green, (layer ? 0.16 : 0.7) * a); ctx.lineWidth = layer ? 1 : 1.3; ctx.stroke();
+    }
+  }
+  function busyHalo(n, k, col, a, w) {  // in progress, for a gate or plan segment: a breathing halo
+    var breath = reduce.matches ? 0.6 : 0.5 + 0.5 * Math.sin(clock * 2.6 + (n.ph || 0));
+    segArc(n, k, n.a0, n.a1, rgba(col, (0.1 + 0.25 * breath) * a), w);
+  }
+  function drawNode(n) {
+    var a = n.shown * (n.vis == null ? 1 : n.vis);
+    if (a <= 0.01 || n.ring === "wall" || n.ring === "phase" || n.ring === "center") return;
+    var col = LAYER_COL[n.layer], r = n.rd || n.r, st = n.state, x = n.x, y = n.y, d = n.detail || {};
+    var pulse = 0.5 + 0.5 * Math.sin(clock * 2.4 + n.ph);
+    if (n.busy) busyRipple(x, y, r, st === "sealed" ? C.mag : col, a, n.ph || 0);
+    if (n.human) humanWave(x, y, r, a, n.ph || 0);
+    if (n.flare > 0) {
+      dot(x, y, r * (2 + 5 * (1 - n.flare)), rgba(col, 0.3 * n.flare));
+      arc(x, y, r * (1.5 + 4 * (1 - n.flare)), 0, 6.2832, rgba(C.white, 0.5 * n.flare), 1);
+    }
+    if (st === "online" || st === "sealed") {
+      dot(x, y, r * 2.3, rgba(col, 0.08 * a));
+      dot(x, y, r, rgba(col, (st === "sealed" ? 0.55 : 0.85) * a));
+      dot(x, y, r * 0.42, rgba(C.white, 0.75 * a));
+      if (st === "sealed") { arc(x, y, r + 3, 0, 6.2832, rgba(C.mag, (0.5 + 0.3 * pulse) * a), 1.4); lock(x, y - r - 7, rgba(C.white, 0.9 * a)); }
+    } else if (st === "active") {
+      dot(x, y, r * 2.2, rgba(col, (0.05 + 0.05 * pulse) * a));
+      arc(x, y, r, 0, 6.2832, rgba(col, 0.4 * a), 1.2);
+      dot(x, y, r * 0.5, rgba(col, (0.45 + 0.35 * pulse) * a));
+      var f = d.total ? Math.min(1, (d.done || 0) / d.total) : null;
+      if (f != null) arc(x, y, r + 2.5, -Math.PI / 2, -Math.PI / 2 + 6.2832 * f, rgba(col, 0.95 * a), 2);
+      else { var sa = clock * 2 + n.ph; arc(x, y, r + 2.5, sa, sa + 1.2, rgba(col, 0.9 * a), 2); }
+    } else if (st === "ready") {
+      arc(x, y, r, 0, 6.2832, rgba(col, (0.35 + 0.5 * pulse) * a), 1.4);
+      dot(x, y, r * 0.3, rgba(col, 0.5 * a));
+    } else if (st === "superseded") {
+      dot(x, y, r, rgba("95,55,70", 0.75 * a));
+      ctx.strokeStyle = rgba(C.red, 0.75 * a); ctx.lineWidth = 1; ctx.beginPath();
+      ctx.moveTo(x - r, y - r * 0.3); ctx.lineTo(x - r * 0.2, y + r * 0.25); ctx.lineTo(x + r * 0.3, y - r * 0.4); ctx.lineTo(x + r, y + r * 0.3); ctx.stroke();
+    } else {
+      arc(x, y, r, 0, 6.2832, rgba(C.grey, (st === "unknown" ? 0.25 : 0.45) * a), 1);
+    }
+    if (d.fraction != null && n.ring === "core") arc(x, y, r + 4.5, -Math.PI / 2, -Math.PI / 2 + 6.2832 * d.fraction, rgba(C.gold, 0.8 * a), 1.6);
+  }
+  function drawCenter() {
+    var c = nodes["claims"];
+    if (!c || c.shown <= 0.01) return;
+    var a = c.shown * (c.vis == null ? 1 : c.vis), r = c.rd || c.r, d = c.detail || {};
+    var g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r * 2.6);
+    g.addColorStop(0, rgba(C.gold, 0.3 * a)); g.addColorStop(1, rgba(C.gold, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, r * 2.6, 0, 6.2832); ctx.fill();
+    dot(c.x, c.y, r, "rgba(22,15,8,0.92)");
+    arc(c.x, c.y, r, 0, 6.2832, rgba(C.gold, 0.3 * a), 2.5);
+    if (d.fraction != null) arc(c.x, c.y, r, -Math.PI / 2, -Math.PI / 2 + 6.2832 * d.fraction, rgba(C.gold, 0.95 * a), 3);
+    if (c.flare > 0) arc(c.x, c.y, r * (1.3 + 2 * (1 - c.flare)), 0, 6.2832, rgba(C.white, 0.6 * c.flare), 1.5);
+    text("CLAIMS", c.x, c.y - 1, rgba(C.white, 0.92 * a), Math.max(8, FS), "center", "700");
+    if (d.live) text(num(d.established) + " / " + num(d.live), c.x, c.y + FS + 1, rgba(C.gold, 0.85 * a), Math.max(7, FS - 2), "center", "600");
+  }
+  function shortLabel(n) {
+    if (n.id.indexOf("note.s") === 0) return "\u00A7" + n.id.slice(6);
+    if (n.id.indexOf("dec.") === 0) return n.label.replace(" decisions", "") + " decisions";
+    return n.label;
+  }
+  function drawLabels() {
+    var small = R < 170, fr = FOCUS[level].rings, placed = [], s3 = me > 0.5;
+    (s3 ? list.slice().sort(function (p, q) { return (q.z || 0) - (p.z || 0); }) : list).forEach(function (n) {
+      if (n.shown < 0.6 || n.ring === "wall" || n.ring === "phase" || n.ring === "center") return;
+      if (s3) {  // in the shells: only the shell in focus; with several shells in view, only their near side
+        if (fr.indexOf(n.ring) < 0 || level < 2 && ((n.vis || 0) < 0.55 || n.z < -0.02)) return;
+      } else if (n.ring === "law2" || n.ring === "core2" || small && n.id.indexOf("note.s") === 0) return;
+      var ang = me > 0.5 ? Math.atan2(n.y - CY, n.x - CX) : n.a;
+      var ca = Math.cos(ang), sa = Math.sin(ang), off = (n.rd || n.r) + 5, hi = sel && sel.id === n.id;
+      var x = n.x + ca * off, y = n.y + sa * off + 3, align = ca > 0.25 ? "left" : ca < -0.25 ? "right" : "center";
+      if (align === "center") y += sa > 0 ? 7 : -3;
+      var fz = Math.max(7, FS - 2), lab = trunc(shortLabel(n), small ? 12 : 20);
+      ctx.font = "500 " + fz + "px " + MONO;
+      var room = align === "left" ? W - 4 - x : align === "right" ? x - 4 : W;
+      while (lab.length > 4 && ctx.measureText(lab).width > room) lab = lab.slice(0, -2) + "\u2026";  // fit inside the panel
+      if (s3 && !hi) {  // in the shells the nearest labels win, and any that would overlap them are left out
+        var lw = ctx.measureText(lab).width, x0 = align === "left" ? x : align === "right" ? x - lw : x - lw / 2;
+        var bx = [x0 - 2, y - fz - 1, x0 + lw + 2, y + 3];
+        if (placed.some(function (q) { return bx[0] < q[2] && q[0] < bx[2] && bx[1] < q[3] && q[1] < bx[3]; })) return;
+        placed.push(bx);
+      }
+      text(lab, x, y, rgba(hi ? C.white : LAYER_COL[n.layer], hi ? 0.95 : 0.55 * (s3 ? Math.min(1, (n.vis || 0) + 0.25) : 1)), fz, align);
+    });
+  }
+  function glyph(st, x, y, col) {
+    if (st === "online") dot(x, y, 3.2, rgba(col, 0.9));
+    else if (st === "active") { arc(x, y, 3.2, 0, 6.2832, rgba(col, 0.5), 1); arc(x, y, 4.8, -1.57, 1.3, rgba(col, 0.95), 1.5); }
+    else if (st === "ready") arc(x, y, 3.2, 0, 6.2832, rgba(col, 0.85), 1.3);
+    else if (st === "under review") {
+      var tw = reduce.matches ? 0 : clock * 0.9;
+      ctx.beginPath();
+      for (var j = 0; j <= 40; j++) {
+        var q = j / 40 * 6.2832, rr = 3.6 + 1.1 * Math.sin(6 * q + tw);
+        if (j) ctx.lineTo(x + Math.cos(q) * rr, y + Math.sin(q) * rr); else ctx.moveTo(x + Math.cos(q) * rr, y + Math.sin(q) * rr);
+      }
+      ctx.closePath(); ctx.strokeStyle = rgba(col, 0.9); ctx.lineWidth = 1; ctx.stroke();
+    }
+    else if (st === "in progress") {
+      var t = reduce.matches ? 0.4 : (clock * 0.42) % 1;
+      dot(x, y, 2, rgba(col, 0.9)); arc(x, y, 2.6 + 3.4 * t, 0, 6.2832, rgba(col, 0.9 * (1 - t)), 1.1);
+    }
+    else if (st === "sealed") { dot(x, y, 3, rgba(C.green, 0.6)); arc(x, y, 4.8, 0, 6.2832, rgba(col, 0.85), 1.2); }
+    else if (st === "superseded") { dot(x, y, 3.2, "rgba(95,55,70,0.85)"); ctx.strokeStyle = rgba(col, 0.85); ctx.lineWidth = 1; line(x - 3.2, y - 1, x + 3.2, y + 1); }
+    else arc(x, y, 3.2, 0, 6.2832, rgba(col, 0.55), 1);
+  }
+  function drawLegend() {
+    var items = [["online", C.green], ["in progress", C.cyan], ["under review", C.green], ["active", C.cyan], ["ready", C.cyan], ["sealed", C.mag], ["planned", C.grey], ["superseded", C.red]];
+    var x = 14, y = H - 10, fs = Math.max(7, FS - 3);
+    if (ctlDirty && ctlEl) { ctlW = ctlEl.offsetWidth; ctlDirty = !ctlW; }
+    ctx.font = "500 " + fs + "px " + MONO;
+    items.forEach(function (it) {
+      var w = ctx.measureText(it[0].toUpperCase()).width;
+      if (x + w + 22 > W - 14 - (ctlW ? ctlW + 12 : 0)) { x = 14; y -= fs + 7; }  // keep clear of the view buttons
+      glyph(it[0], x + 4, y - fs / 3, it[1]);
+      text(it[0].toUpperCase(), x + 12, y, rgba(C.white, 0.45), fs);
+      x += w + 26;
+    });
+  }
+  function drawHud() {
+    var fs = Math.max(8, FS - 1);
+    text("LINEAGE V3 // FRAMEWORK", 14, 20, rgba(C.cyan, 0.85), Math.max(9, FS), "left", "700");
+    var t = {};
+    list.forEach(function (n) { t[n.state] = (t[n.state] || 0) + 1; });
+    text(["online", "active", "sealed", "ready", "planned"].filter(function (k) { return t[k]; })
+      .map(function (k) { return t[k] + " " + k.toUpperCase(); }).join(" \u00B7 "), 14, 36, rgba(C.white, 0.5), fs);
+    if (fw && fw.built_epoch && W > 380) text("MAP BUILT " + hhmm(fw.built_epoch), W - 14, 20, rgba(C.white, 0.45), fs, "right");
+    var cur = list.filter(function (n) { return n.ring === "phase" && n.state === "active"; })[0];
+    if (cur && W > 520) text("NOW: " + trunc(cur.label, 30).toUpperCase(), W - 14, 36, rgba(C.cyan, 0.7), fs, "right");
+    if (me > 0.5) {
+      text("VIEW: " + FOCUS[level].name, 14, 52, rgba(C.white, 0.6 * me), fs, "left", "600");
+      text("DRAG TO TURN \u00B7 SCROLL OR PINCH TO ZOOM", W - 14, H - 42, rgba(C.white, 0.32 * me), Math.max(7, FS - 3), "right");
+    }
+  }
+  function drawSel() {
+    if (!ringSel || ringA <= 0.01) return;
+    var n = nodes[ringSel.id];
+    if (!n) return;
+    var e = 1 - Math.pow(1 - ringA, 3);
+    ctx.setLineDash([3, 3]); ctx.lineDashOffset = -clock * 12;
+    if (n.ring === "wall" || n.ring === "phase") {
+      if (me > 0.5) arc(n.x, n.y, 12 * (0.55 + 0.45 * e), 0, 6.2832, rgba(C.white, 0.85 * ringA), 1.3);
+      else segArc(n, RINGS[n.ring] + 9 * e / R, n.a0, n.a1, rgba(C.white, 0.85 * ringA), 1.3);
+    } else arc(n.x, n.y, ((n.rd || n.r) + 8) * (0.55 + 0.45 * e), 0, 6.2832, rgba(C.white, 0.85 * ringA), 1.3);
+    ctx.setLineDash([]); ctx.lineDashOffset = 0;
+  }
+  function draw() {
+    var g = ctx.createRadialGradient(CX, CY, 0, CX, CY, Math.max(W, H) * 0.7);
+    g.addColorStop(0, "#160d27"); g.addColorStop(0.6, "#0a0717"); g.addColorStop(1, "#040308");
+    ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    if (!list.length) {
+      text(fw && fw.missing ? "The framework map has not been built yet." : "Loading the framework\u2026", W / 2, H / 2,
+           rgba(C.white, 0.5), 12, "center");
+      return;
+    }
+    var Pv = window.__lineageProc, run = Pv && Pv.running ? Pv.running() : {};
+    list.forEach(function (n) {  // in progress: active, or tied to compute running now; under review: tied to people's work
+      var w = n.work || [];
+      n.human = w.some(function (id) { return run[id] === "people"; });
+      n.busy = n.state === "active" || w.some(function (id) { return run[id] && run[id] !== "people"; });
+    });
+    if (me < 0.99) { ctx.globalAlpha = 1 - me; drawGuides(); ctx.globalAlpha = 1; }
+    drawShells();
+    ctx.globalCompositeOperation = "lighter";
+    drawEdges(); drawPulses();
+    ctx.globalCompositeOperation = "source-over";
+    drawPhases(); drawWall();
+    (me > 0.01 ? list.slice().sort(function (p, q) { return (p.z || 0) - (q.z || 0); }) : list).forEach(drawNode);  // far side first
+    drawCenter(); drawLabels(); drawHud(); drawLegend(); drawSel();
+  }
+
+  // ---- taps and popups ----
+  function pbar(pct, col) {
+    pct = Math.max(0, Math.min(100, pct || 0));
+    return '<span class="vp-bar"><span style="width:' + pct.toFixed(0) + '%;background:rgb(' + col + ')"></span></span>';
+  }
+  function row(k, v) { return '<div class="vp-r"><span class="vp-k">' + esc(k) + '</span><span class="vp-v">' + v + '</span></div>'; }
+  function relLines(n) {
+    var ins = [], outs = [], s = "";
+    edges.forEach(function (ed) { if (ed.e.kind === "records") return; if (ed.b === n) ins.push(ed); if (ed.a === n) outs.push(ed); });
+    function block(title, eds, other) {
+      if (!eds.length) return "";
+      return '<div class="vp-h">' + title + '</div>' + eds.slice(0, 8).map(function (ed) {
+        var o = other(ed);
+        return '<div class="vp-j">' + esc(o.label) + ' <span class="vp-n">' + esc(ed.e.why) + '</span></div>';
+      }).join("") + (eds.length > 8 ? '<div class="vp-n">and ' + (eds.length - 8) + ' more</div>' : "");
+    }
+    s += block("Depends on", ins, function (ed) { return ed.a; });
+    s += block("Unlocks or shapes", outs, function (ed) { return ed.b; });
+    return s;
+  }
+  function reviewLines(n) {
+    var rs = ((fw && fw.review_attacks) || []).filter(function (r) { return r.target === n.id || r.by === n.id; });
+    if (!rs.length) return "";
+    return '<div class="vp-h">Review rounds</div>' + rs.map(function (r) {
+      return '<div class="vp-j">' + esc(r.round) + ' <span class="vp-n">' + r.strikes + (r.strikes === 1 ? " strike: " : " strikes: ")
+        + esc(r.what) + '</span></div>';
+    }).join("");
+  }
+  function popNode(n) {
+    var d = n.detail || {}, s = '<div class="vp-t">' + esc(n.label) + '</div>';
+    if (n.desc) s += '<div class="vp-n">' + esc(n.desc) + '</div>';
+    s += row("State", esc(STATE_TEXT[n.state] || n.state));
+    var now = (n.busy ? ["in progress"] : []).concat(n.human ? ["with the outside reviewers"] : []);
+    if (now.length) s += row("Now", now.join("; "));
+    s += row("Ring", esc(LAYER_NAME[n.layer] || n.layer) + (n.ring !== "wall" && n.ring !== "phase" && n.ring !== "center" && n.sector
+         ? ", " + esc(SECTOR_NAME[n.sector].toLowerCase()) : ""));
+    if (d.counts) {
+      s += row("Established", num(d.established) + " of " + num(d.live) + pbar(100 * d.fraction, C.gold));
+      s += '<div class="vp-n">' + Object.keys(d.counts).sort(function (a, b) { return d.counts[b] - d.counts[a]; })
+        .map(function (k) { return esc(k.replace(/_/g, " ")) + " " + d.counts[k]; }).join(" \u00B7 ") + '</div>';
+    }
+    if (d.total) s += row("Progress", num(d.done) + " of " + num(d.total) + pbar(100 * (d.done || 0) / d.total, C.cyan));
+    if (d.stage) s += row("Stage", esc(d.stage));
+    if (d.decided != null) s += row("Decided", d.decided + " of " + d.of);
+    if (d.before || d.after) {
+      s += row("Checks", (d.before ? "before the runs: " + esc(d.before) : "") + (d.before && d.after ? "; " : "")
+        + (d.after ? "after the runs: " + esc(d.after) + (n.state === "sealed" ? ", sealed" : "") : ""));
+    }
+    if (d.files != null) s += row("Records", d.files + " file" + (d.files === 1 ? "" : "s"));
+    if (d.tasks != null) s += row("Tasks", String(d.tasks));
+    if (d.note) s += row("Note", esc(d.note));
+    if (n.source) s += row("Lit by", esc(n.source));
+    return s + relLines(n) + reviewLines(n);
+  }
+  function renderPop() {
+    if (!sel || !nodes[sel.id]) { closePop(); return; }
+    popBody.innerHTML = popNode(nodes[sel.id]);
+    placePop();
+  }
+  function placePop() {
+    var opening = !pop.classList.contains("open");
+    var pw = pop.offsetWidth, ph = pop.offsetHeight, x = sel.x + 14, y = sel.y + 14;
+    if (x + pw > W - 8) x = sel.x - pw - 14;
+    if (y + ph > H - 8) y = H - ph - 8;
+    var left = Math.max(8, Math.min(x, W - pw - 8)), top = Math.max(8, y);
+    pop.style.left = left + "px"; pop.style.top = top + "px";
+    pop.style.transformOrigin = (sel.x - left) + "px " + (sel.y - top) + "px";
+    if (opening) { void pop.offsetWidth; pop.classList.add("open"); }
+  }
+  function closePop() { sel = null; if (pop) pop.classList.remove("open"); }
+  function hit(x, y) {
+    var best = null, bd = Infinity;
+    list.forEach(function (n) {
+      if (n.shown < 0.5) return;
+      if (me > 0.5 && (n.vis || 0) < 0.35) return;  // faded parts outside the shell in focus
+      if ((n.ring === "wall" || n.ring === "phase") && me > 0.5) {
+        segPts(n, RINGS[n.ring], n.a0, n.a1).forEach(function (q) {
+          var d3 = Math.hypot(x - q.x, y - q.y);
+          if (d3 < 10 && d3 < bd) { bd = d3; best = n; }
+        });
+        return;
+      }
+      if (n.ring === "wall" || n.ring === "phase") {
+        var nx = (x - CX) / RX, ny = (y - CY) / RY, dr = Math.abs(Math.hypot(nx, ny) - RINGS[n.ring]) * R;
+        if (dr > 10) return;
+        var a = Math.atan2(ny, nx);
+        while (a < n.a0) a += 6.2832;
+        while (a > n.a0 + 6.2832) a -= 6.2832;
+        if (a <= n.a1 && dr < bd) { bd = dr; best = n; }
+        return;
+      }
+      var dd = Math.hypot(x - n.x, y - n.y);
+      if (dd < Math.max(8, (n.rd || n.r) + 5) && dd < bd) { bd = dd; best = n; }
+    });
+    return best;
+  }
+  function at(ev) { var r = cv.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
+  cv.addEventListener("click", function (ev) {
+    if (mode3d && moved) { moved = false; return; }  // the end of a drag, not a tap
+    var p = at(ev), n = hit(p.x, p.y);
+    if (!n) { closePop(); return; }
+    if (!sel || sel.id !== n.id) ringA = 0;
+    sel = { id: n.id, x: p.x, y: p.y };
+    if (mode3d && n.k && !reduce.matches) yawGoal = n.a - Math.PI / 2;  // swing it round to face the viewer
+    renderPop();
+  });
+  cv.addEventListener("mousemove", function (ev) {
+    var p = at(ev);
+    cv.style.cursor = drag && moved ? "grabbing" : hit(p.x, p.y) ? "pointer" : mode3d ? "grab" : "default";
+  });
+  var modeBtn = document.getElementById("fw-mode");
+  function setMode(on, persist) {
+    mode3d = on; yaw = wrapA(yaw); yawGoal = null;
+    if (on) level = 0;  // the shells open on the whole citadel
+    wrap.classList.toggle("fw3d", on);
+    modeBtn.textContent = on ? "Flat view" : "3D shells";
+    modeBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    cv.style.touchAction = on ? "none" : "";
+    ctlDirty = true;
+    if (persist) { try { localStorage.setItem(MODEKEY, on ? "3d" : "flat"); } catch (e) {} }
+    closePop(); kick();
+  }
+  function zoomBy(dl) {
+    var nl = Math.max(0, Math.min(FOCUS.length - 1, level + dl));
+    if (nl !== level) { level = nl; closePop(); kick(); }
+  }
+  modeBtn.addEventListener("click", function () { setMode(!mode3d, true); });
+  document.getElementById("fw-zoom-in").addEventListener("click", function () { zoomBy(1); });
+  document.getElementById("fw-zoom-out").addEventListener("click", function () { zoomBy(-1); });
+  cv.addEventListener("wheel", function (ev) {
+    if (!mode3d) return;
+    ev.preventDefault();
+    wheelAcc += ev.deltaY;
+    if (Math.abs(wheelAcc) > 100) { zoomBy(wheelAcc < 0 ? 1 : -1); wheelAcc = 0; }
+  }, { passive: false });
+  function apart() {
+    var ids = Object.keys(pointers), a = pointers[ids[0]], b = pointers[ids[1]];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  cv.addEventListener("pointerdown", function (ev) {
+    if (!mode3d) return;
+    pointers[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+    try { cv.setPointerCapture(ev.pointerId); } catch (e) {}
+    var count = Object.keys(pointers).length;
+    if (count === 1) { drag = { x: ev.clientX, y: ev.clientY, yaw: yaw, pitch: pitch }; moved = false; }
+    else if (count === 2) { pinch0 = apart(); drag = null; moved = true; }
+  });
+  cv.addEventListener("pointermove", function (ev) {
+    if (!mode3d || !pointers[ev.pointerId]) return;
+    pointers[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+    if (pinch0 && Object.keys(pointers).length === 2) {  // a pinch steps one shell in or out at a time
+      var dd = apart();
+      if (dd / pinch0 > 1.3) { zoomBy(1); pinch0 = dd; } else if (dd / pinch0 < 0.77) { zoomBy(-1); pinch0 = dd; }
+      return;
+    }
+    if (drag) {
+      var dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+      if (!moved && Math.abs(dx) + Math.abs(dy) > 5) { moved = true; yawGoal = null; }
+      if (moved) { yaw = drag.yaw - dx * 0.008; pitch = Math.max(0.05, Math.min(1.45, drag.pitch + dy * 0.006)); }
+    }
+  });
+  function endPointer(ev) { delete pointers[ev.pointerId]; if (!Object.keys(pointers).length) { drag = null; pinch0 = null; } }
+  cv.addEventListener("pointerup", endPointer);
+  cv.addEventListener("pointercancel", endPointer);
+  document.getElementById("fw-pop-x").addEventListener("click", closePop);
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") closePop(); });
+
+  function frame(ts) {
+    raf = 0;
+    if (!shown()) return;
+    resize();
+    var dt = last ? Math.min(0.1, (ts - last) / 1000) : 0.016;
+    last = ts;
+    clock += dt;
+    update3d(dt); updateAll();
+    if (sel && yawGoal != null && nodes[sel.id]) { sel.x = nodes[sel.id].x; sel.y = nodes[sel.id].y; placePop(); }
+    step(dt); draw();
+    raf = requestAnimationFrame(frame);
+  }
+  function kick() { if (!raf && shown()) { last = 0; raf = requestAnimationFrame(frame); } }
+
+  // ---- the tab transition: work lifts off one view and settles into its place in the other ----
+  function prepareFw(w, h) {
+    W = w; H = h; DPR = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    layout();
+    list.forEach(function (n) { n.shown = 1; });  // no boot sequence when arriving this way
+    bootT = 1e3;
+    update3d(0); updateAll();  // land where each part sits now, flat or in the shells
+  }
+  function startTransition(from, to) {
+    var Pv = window.__lineageProc, scr = document.getElementById("viz-screen");
+    var w = scr.clientWidth, h = scr.clientHeight;
+    if (!Pv || !w || !h || reduce.matches || !list.length) return false;
+    var src = from === "proc" ? Pv.canvas : cv;
+    if (!src.width) return false;
+    var snap = document.createElement("canvas");
+    snap.width = src.width; snap.height = src.height;
+    snap.getContext("2d").drawImage(src, 0, 0);
+    Pv.prepare(w, h);
+    prepareFw(w, h);
+    var flyers = [];
+    Pv.items().forEach(function (it) {
+      list.forEach(function (n) {
+        if ((n.work || []).indexOf(it.id) < 0) return;
+        var pa = { x: it.x, y: it.y, s: it.size, col: it.col }, fa = { x: n.x, y: n.y, s: Math.max(4, n.rd || n.r), col: LAYER_COL[n.layer] };
+        flyers.push({ id: it.id, node: n, a: from === "proc" ? pa : fa, b: from === "proc" ? fa : pa, trail: [], landed: false,
+                      bend: (Math.random() - 0.5) * 0.5, delay: Math.random() * 0.12 });
+      });
+    });
+    if (!flyers.length) return false;
+    var split = {};  // a job that settles into many parts (the gates) splits into dimmer sparks
+    flyers.forEach(function (f) { split[f.id] = (split[f.id] || 0) + 1; });
+    flyers.forEach(function (f) { f.dim = 1 / Math.sqrt(split[f.id]); });
+    var ov = scr.querySelector("canvas.viz-trans");
+    if (!ov) { ov = document.createElement("canvas"); ov.className = "viz-trans"; scr.appendChild(ov); }
+    ov.style.display = "block";
+    var dpr = Math.min(2, window.devicePixelRatio || 1), oc = ov.getContext("2d");
+    ov.width = Math.round(w * dpr); ov.height = Math.round(h * dpr); oc.setTransform(dpr, 0, 0, dpr, 0, 0);
+    transBusy = true;
+    applyTab(to, true);
+    var t0 = null, DUR = 1.6;
+    function ease(x) { return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; }
+    function tick(ts) {
+      if (t0 == null) t0 = ts;
+      var e = Math.min(1, (ts - t0) / 1000 / DUR);
+      oc.clearRect(0, 0, w, h);
+      // the outgoing view recedes (to the framework) or opens up (to processing) as it fades
+      var fade = 1 - Math.min(1, e / 0.5), sc = from === "proc" ? 1 - 0.07 * e : 1 + 0.07 * e;
+      if (fade > 0) {
+        oc.save(); oc.globalAlpha = fade; oc.translate(w / 2, h / 2); oc.scale(sc, sc); oc.translate(-w / 2, -h / 2);
+        oc.drawImage(snap, 0, 0, w, h); oc.restore();
+      }
+      oc.globalCompositeOperation = "lighter";
+      flyers.forEach(function (f) {
+        var k = Math.max(0, Math.min(1, (e - f.delay) / (1 - f.delay))), lift = Math.min(1, k / 0.2);
+        var travel = ease(Math.max(0, Math.min(1, (k - 0.2) / 0.62))), settle = Math.max(0, (k - 0.82) / 0.18);
+        var q = { x: (f.a.x + f.b.x) / 2 - (f.b.y - f.a.y) * f.bend, y: (f.a.y + f.b.y) / 2 + (f.b.x - f.a.x) * f.bend - 40 };
+        var u = 1 - travel, x = u * u * f.a.x + 2 * u * travel * q.x + travel * travel * f.b.x;
+        var y = u * u * f.a.y + 2 * u * travel * q.y + travel * travel * f.b.y - 10 * lift * (1 - travel);  // a small lift first
+        var size = (f.a.s * (1 + 0.22 * lift)) * (1 - travel) + f.b.s * travel, col = travel < 0.5 ? f.a.col : f.b.col;
+        f.trail.push({ x: x, y: y });
+        if (f.trail.length > 14) f.trail.shift();
+        f.trail.forEach(function (p, i) {
+          oc.fillStyle = rgba(col, 0.05 + 0.25 * i / f.trail.length);
+          oc.beginPath(); oc.arc(p.x, p.y, 1 + 1.5 * i / f.trail.length, 0, 6.2832); oc.fill();
+        });
+        var glow = (1 - settle) * f.dim;
+        oc.fillStyle = rgba(col, 0.12 * glow); oc.beginPath(); oc.arc(x, y, size * 1.7, 0, 6.2832); oc.fill();
+        var nd = 10;
+        for (var i = 0; i < nd; i++) {  // the job's ring, carried along and turning
+          var a2 = i * 6.2832 / nd + e * 6;
+          oc.fillStyle = rgba(col, 0.75 * glow);
+          oc.beginPath(); oc.arc(x + Math.cos(a2) * size, y + Math.sin(a2) * size, 1.4, 0, 6.2832); oc.fill();
+        }
+        oc.fillStyle = rgba(C.white, 0.9 * glow); oc.beginPath(); oc.arc(x, y, 1.5 + size * 0.18, 0, 6.2832); oc.fill();
+        if (settle > 0 && !f.landed) {  // it lands: the part it settles into flares
+          f.landed = true;
+          if (to === "fw") f.node.flare = 1; else Pv.flash(f.id);
+        }
+      });
+      oc.globalCompositeOperation = "source-over";
+      if (e < 1) { requestAnimationFrame(tick); return; }
+      oc.clearRect(0, 0, w, h); ov.style.display = "none"; transBusy = false;
+    }
+    requestAnimationFrame(tick);
+    return true;
+  }
+
+  var saved = null;
+  try { saved = localStorage.getItem(TABKEY); } catch (e) {}
+  var savedMode = null;
+  try { savedMode = localStorage.getItem(MODEKEY); } catch (e) {}
+  if (savedMode === "3d") { mT = 1; me = 1; setMode(true, false); }
+  setTab(saved === "proc" ? "proc" : "fw", false);
+  poll(true);  // prefetch the map, so a transition has somewhere to land
+  window.addEventListener("resize", function () { resize(); kick(); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) { poll(); kick(); } });
+  setInterval(poll, 120000);
+})();
+</script>
+</body></html>

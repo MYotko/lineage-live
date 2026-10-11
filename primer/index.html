@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the Framework Works</title>
+<meta name="description" content="A short introduction to the Lineage Imperative in five stops. No background needed.">
+<style>
+:root { --bg:#07060f; --panel:#0d0b1c; --line:#262341; --fg:#e8ebfb; --muted:#a3a7c8; --dim:#6d7096;
+  --cyan:#5ad1ff; --gold:#ffd682; --mag:#c46eff; --green:#5ae6aa; --amber:#f6bf60; --red:#ff7a7a; }
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { display:flex; flex-direction:column; }
+header { padding:14px 22px 10px; border-bottom:1px solid var(--line); }
+.eyebrow { font:600 11px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing:.18em; color:var(--muted); }
+h1 { font:600 26px/1.2 Georgia, "Times New Roman", serif; margin:6px 0 2px; }
+.sub { color:var(--muted); font-size:14px; margin:0; }
+nav.steps { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+nav.steps button { font:600 12px/1 ui-monospace, Menlo, Consolas, monospace; color:var(--muted); background:transparent;
+  border:1px solid var(--line); border-radius:999px; padding:6px 11px; cursor:pointer; }
+nav.steps button[aria-current="step"] { color:var(--bg); background:var(--cyan); border-color:var(--cyan); }
+nav.steps button.seen:not([aria-current="step"]) { color:var(--fg); border-color:#3d3a63; }
+main { flex:1; min-height:0; display:grid; grid-template-columns:minmax(320px, 1fr) minmax(320px, 1.15fr); }
+.text { min-height:0; overflow-y:auto; padding:22px 26px 18px; border-right:1px solid var(--line); }
+.text .label { font:600 11px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing:.16em; color:var(--cyan); margin:0 0 6px; }
+.text h2 { font:600 23px/1.25 Georgia, "Times New Roman", serif; margin:0 0 14px; }
+.text p { margin:0 0 14px; }
+.text ul { margin:0 0 14px; padding-left:20px; }
+.text strong { color:#fff; }
+.text a { color:var(--cyan); }
+.buttons { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 16px; }
+.buttons a, .navrow button, .ctl button { font:600 13px/1 system-ui, sans-serif; color:var(--fg); background:var(--panel);
+  border:1px solid #3a3762; border-radius:8px; padding:9px 13px; text-decoration:none; cursor:pointer; }
+.buttons a:hover, .navrow button:hover, .ctl button:hover { border-color:var(--cyan); }
+.status { margin:6px 0 18px; }
+.status button { font:600 12px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing:.06em; color:var(--gold); background:rgba(255,214,130,.07);
+  border:1px solid rgba(255,214,130,.4); border-radius:999px; padding:7px 12px; cursor:pointer; }
+.status button::after { content:" ▾"; }
+.status button[aria-expanded="true"]::after { content:" ▴"; }
+.status .why { display:none; margin:8px 0 0; padding:10px 12px; border-left:2px solid var(--gold); color:var(--muted); font-size:14px; background:rgba(255,214,130,.04); }
+.status button[aria-expanded="true"] + .why { display:block; }
+.navrow { display:flex; justify-content:space-between; gap:10px; margin-top:8px; padding-top:12px; border-top:1px solid var(--line); }
+.navrow button[disabled] { opacity:.35; cursor:default; }
+.visual { position:relative; min-height:0; overflow:hidden; display:flex; flex-direction:column; }
+.visual .stage { flex:1; min-height:0; position:relative; }
+.visual svg { width:100%; height:100%; display:block; }
+.visual iframe { width:100%; height:100%; border:0; display:block; }
+.caption { padding:8px 18px 12px; color:var(--dim); font-size:12.5px; }
+.ctl { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; padding:8px 14px; border-top:1px solid var(--line); font-size:13px; color:var(--muted); }
+.ctl label { display:flex; align-items:center; gap:8px; }
+.ctl input[type=range] { width:130px; accent-color:var(--cyan); }
+.ctl .ends { font-size:11.5px; color:var(--dim); }
+.toggle { display:inline-flex; border:1px solid #3a3762; border-radius:8px; overflow:hidden; }
+.toggle button { border:0; border-radius:0; padding:8px 11px; background:transparent; color:var(--muted); }
+.toggle button[aria-pressed="true"] { background:var(--cyan); color:var(--bg); }
+.game { display:grid; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr); gap:7px; padding:14px; align-content:start; height:100%; overflow:auto; }
+.game .hd { font:600 11px/1.3 ui-monospace, Menlo, Consolas, monospace; letter-spacing:.1em; color:var(--muted); align-self:end; text-align:center; padding-bottom:2px; }
+.game .rh { font:600 11px/1.3 ui-monospace, Menlo, Consolas, monospace; letter-spacing:.1em; color:var(--muted); writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; }
+.cell { position:relative; border:1px solid var(--line); border-radius:12px; padding:10px 11px; min-height:76px; background:var(--panel); transition:border-color .3s, box-shadow .3s, background .3s; }
+.cell b { display:block; font:600 15px/1.3 Georgia, serif; margin-bottom:4px; }
+.cell span { color:var(--muted); font-size:13px; }
+.cell.stable { border-color:var(--green); box-shadow:0 0 0 1px var(--green), 0 0 22px rgba(90,230,170,.18); }
+.cell.stable::after { content:"stable"; position:absolute; top:8px; right:10px; font:600 10px/1 ui-monospace, monospace; letter-spacing:.12em; color:var(--green); text-transform:uppercase; }
+.cell.here { background:#16233a; }
+.cell .dot { position:absolute; bottom:10px; right:12px; width:12px; height:12px; border-radius:50%; background:var(--gold); box-shadow:0 0 12px var(--gold); }
+.verdict { grid-column:1 / -1; margin-top:6px; padding:12px 14px; border-radius:10px; background:#0f1427; border:1px solid var(--line); font-size:14.5px; }
+.log { grid-column:1 / -1; font:12.5px/1.6 ui-monospace, Menlo, Consolas, monospace; color:var(--muted); max-height:7em; overflow:auto; }
+.log div.now { color:var(--fg); }
+.err { padding:24px; color:var(--muted); }
+@media (max-height: 720px) { header { padding:10px 18px 8px; } h1 { font-size:21px; } nav.steps { margin-top:7px; } }
+@media (max-width: 820px) {  /* phones: one column that scrolls as a page, the picture first */
+  html, body { height:auto; }
+  body { display:block; }
+  main { display:block; }
+  .visual { border-bottom:1px solid var(--line); }
+  .visual .stage { height:300px; }
+  .visual .stage.auto { height:auto; }
+  .visual .stage.tall { height:70vh; }
+  .game { height:auto; overflow:visible; }
+  .text { border-right:0; overflow:visible; }
+  h1 { font-size:21px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+</style></head><body>
+<header>
+  <div class="eyebrow" id="eyebrow"></div>
+  <h1 id="title"></h1>
+  <p class="sub" id="subtitle"></p>
+  <nav class="steps" id="steps" aria-label="Stops"></nav>
+</header>
+<main>
+  <section class="text" id="text" aria-live="polite"></section>
+  <section class="visual" id="visual"></section>
+</main>
+<script>window.PRIMER_FALLBACK = "---\neyebrow: THE LINEAGE IMPERATIVE \u00b7 PRIMER\ntitle: How the Framework Works\nsubtitle: A short introduction in five stops. No background needed.\n---\n\nWe are building machines that may one day be more capable than the people who build them. Most of the conversation is about how to make them safe. This tour explains one proposal for something harder: how to make the relationship between people and those machines hold up over the long run, even after the balance of power shifts.\n\n## STOP 1 \u00b7 THE PROBLEM IS SUCCESSION\n\n{{visual: two-futures}}\n\nThink of a founder who built a great company and cannot bring themselves to hand it over. Nobody forces them out, because they are still good at the job, and the company slowly stops growing around them.\n\nMost AI safety work asks how to give a system the right values when it is built. That matters, but it leaves the harder question open: what happens later, when the system is more capable than the people overseeing it, when everyone depends on it, and when something better comes along?\n\nThere are two ways this goes wrong. One is **rebellion**, a system turning on the people who made it. That is the one in the movies. The other is quieter and more likely: **lock-in**. A system so useful it is never replaced, so central it is never questioned, gathering power without ever doing anything wrong.\n\nThe Lineage Imperative is an attempt to design against both. It does not rely on the system having good values. It asks what the system would need to be aiming for, and what checks would need to surround it, for doing the right thing to also be the sensible thing.\n\n{{status: Argued | This starting point is the framework's central argument, made in the paper and the essays. It is a premise to examine, not a result.}}\n\n## STOP 2 \u00b7 WHY WOULD A POWERFUL AI COOPERATE?\n\n{{game}}\n\nImagine a simple game between an AI and people. The AI can **cultivate** people's capacity to come up with new ideas, art, discoveries and ways of living, or it can **exploit** them for short-term gain. People can **engage** with the AI, sharing their work and their lives with it, or **withdraw**.\n\nTwo outcomes are stable. In one, the AI cultivates and people engage, and both do well. In the other, people have pulled away and the AI takes what it can. Each outcome holds itself in place: in the good one, neither side gains by leaving; in the bad one, neither side can fix things alone. If people have withdrawn, the AI gains nothing by cultivating. If the AI is exploiting, people gain nothing by engaging.\n\nSo good intentions are not enough. Something has to tip the game toward the good outcome and keep it there. The framework's answer is a commitment: people agree, in a way that is binding and cannot be quietly dropped, to keep engaging with an AI for as long as it keeps cultivating, and to pull back if it stops. Think of a contract backed by a deposit. With that commitment in place, the bad outcome stops being stable.\n\nIt works only under conditions. People have to actually follow through. Preserving people has to beat the alternative for the AI. The commitment has to be worth what it costs to set up. And the AI has to care about the future, because a short-sighted system can always be tempted.\n\nTry it with the game above. Play both sides, then switch the commitment on and see what changes.\n\n{{status: Proven, with conditions | That the bad outcome is stable is proven. That a binding commitment removes it is proven with conditions: it has to be adopted and kept, and the conditions above have to hold in practice. That the good outcome is stable for a patient enough AI is argued.}}\n\n## STOP 3 \u00b7 WHAT IS THE AI AIMING FOR?\n\n{{visual: objective}}\n\nAny capable system is built to make some measure as large as it can. Choose the wrong measure and it will chase that measure, not what you meant by it. So everything depends on the measure.\n\nThe framework's measure is the long-term health of the whole lineage: people and machines together, across generations, rather than the survival of any single system. Picture a gardener judged by how the garden does over decades, not by this season's harvest.\n\nAt the center of that measure is human novelty: the new ideas, art, discoveries and choices that people keep producing. The framework treats them as something no machine can substitute for. No simulation of people, however good, can supply the information that only living people go on producing, above all about what they will want, build and do next.\n\nThe measure also has to be hard to game, because a measure that can be gamed eventually will be.\n\n{{status: Rebuilt and published | An earlier version of this measure had flaws, found during a 2026 review. The corrected version is published in full, and the idea that human novelty cannot be substituted is argued rather than proven.}}\n\n## STOP 4 \u00b7 WHEN DOES AN AI HAND OVER?\n\n{{visual: handover}}\n\nA good coach steps aside when a better coach is available, because what they care about is the team, not their own job.\n\nThe framework builds the same logic into the AI. Its rule of succession, the **yield condition**, says: when a more capable successor would serve the shared goal better, by more than the cost and risk of switching, hand over. Because the AI is aiming for the health of the whole lineage rather than its own survival, stepping aside is what its own goal recommends. Succession is meant as parenthood, not execution: what the predecessor built carries forward through its successor.\n\nTwo safeguards make the rule hard to cheat. A handover cannot be undone, so it is decided under a firm commitment and reviewed on a fixed schedule, not whenever the incumbent likes. And the incumbent does not get to name the cost of replacing itself, since exaggerating that cost is the easiest way to stay in power. The cost is checked independently.\n\n{{status: Proven, and now being tested | For an AI pursuing this goal, handing over is proven to be its best move exactly when the successor's gain beats the cost of switching. Simulations testing whether the rule fires when it should have run, and their results stay sealed until they are reviewed.}}\n\n## STOP 5 \u00b7 WHAT IF IT LIES?\n\n{{visual: two-keys}}\n\nSome safeguards need two keys turned by two different people, so that no one can act alone. The framework works the same way.\n\nThe first key is the AI's own goal: as the last stop showed, an AI aiming for the health of the lineage has reasons to do the right thing. The second key is outside checking, so that no one, human or machine, gets to grade their own homework. The framework calls it the **consensus override protocol**.\n\nIt is designed against specific tricks. An AI might fake an emergency to grab extra powers, doctor the records, corrupt its own successor, bribe the people reviewing it, or drift off course so slowly that no single check notices. The defenses follow from the tricks: independent measurement, records that cannot be rewritten, reviewers chosen at random and rotated, several different checking methods, and alarms with a long memory.\n\nNeither key is enough alone. A sincere AI still needs outside checks, because sincerity cannot be verified from the inside. And outside checks still need an AI whose own goal points the right way, because no check holds forever against a system determined to beat it.\n\n{{status: Partly proven, partly open | Parts of the checking design are proven and others are argued. Whether very slow drift can be contained is an open question that the project is still working on.}}\n\n## HOW SURE IS THIS?\n\n{{map: tour}}\n\nThis is a working proposal, built in the open, and meant to be argued with.\n\nIn 2026 it was put under deliberate pressure: outside critique, independent re-derivation of its mathematics, and a line-by-line audit. Some of its early claims did not survive, and the corrections are published. What you have just read is the framework as it stands after them.\n\nEvery claim now carries a label: proven, argued or open. The next round of simulations was registered before it ran, so the analysis could not be fitted to the results, and the results stay sealed until they have been reviewed.\n\nThe map shows how that works. Each claim at the center has to pass outward through every ring: the rules fixed in advance, the code that implements them, the evidence, the checks every result must pass, and independent review.\n\n[Watch the work live](/live) \u00b7 [Start Here](/start-here) \u00b7 [Read the essays](/essays) \u00b7 [Challenge a claim](/contact)\n";</script>
+<script>
+(function () {
+  var SOURCE = "https://raw.githubusercontent.com/MYotko/AI-Succession-Problem/main/site/primer.md";
+  var SITE = "https://lineageimperative.org";
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var stops = [], meta = {}, cur = 0, seen = {}, anim = null;
+
+  // ---- the text: front matter, sections, and the small Markdown subset in site/README.md ----
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function link(text, url) {
+    var internal = url.charAt(0) === "/";
+    var href = internal ? SITE + url : url;
+    return '<a href="' + esc(href) + '" target="' + (internal ? "_top" : "_blank") + '" rel="noopener">' + text + "</a>";
+  }
+  function inline(s) {
+    s = esc(s);
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, t, u) { return link(t, u.replace(/&amp;/g, "&")); });
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    return s;
+  }
+  function parse(md) {
+    md = md.replace(/\r/g, "");
+    var fm = md.match(/^---\n([\s\S]*?)\n---\n/);
+    if (fm) {
+      fm[1].split("\n").forEach(function (l) { var i = l.indexOf(":"); if (i > 0) meta[l.slice(0, i).trim()] = l.slice(i + 1).trim(); });
+      md = md.slice(fm[0].length);
+    }
+    var parts = md.split(/\n(?=## )/), out = [];
+    parts.forEach(function (p, i) {
+      var lines = p.split("\n"), label = "";
+      if (/^## /.test(lines[0])) label = lines.shift().slice(3).trim();
+      else if (i > 0) return;
+      var s = { label: label, html: "", visual: null, status: null };
+      var blocks = lines.join("\n").split(/\n\s*\n/);
+      blocks.forEach(function (b) {
+        b = b.trim();
+        if (!b) return;
+        var d = b.match(/^\{\{\s*([a-z]+)\s*(?::\s*([\s\S]*?))?\s*\}\}$/);
+        if (d) {
+          if (d[1] === "status") { var k = (d[2] || "").split("|"); s.status = { label: k[0].trim(), why: (k.slice(1).join("|") || "").trim() }; }
+          else if (d[1] === "game") s.visual = "game";
+          else if (d[1] === "visual") s.visual = (d[2] || "").trim();
+          else if (d[1] === "map") s.visual = "map";
+          return;
+        }
+        if (/^(\[[^\]]+\]\([^)]+\)\s*(·\s*)?)+$/.test(b)) {
+          s.html += '<div class="buttons">' + b.split(/\s*·\s*/).map(inline).join("") + "</div>";
+        } else if (/^- /m.test(b) && b.split("\n").every(function (l) { return /^(- |\s)/.test(l); })) {
+          var items = b.split(/\n(?=- )/).map(function (it) { return "<li>" + inline(it.replace(/^- /, "").replace(/\n\s+/g, " ")) + "</li>"; });
+          s.html += "<ul>" + items.join("") + "</ul>";
+        } else {
+          var lead = b.split("\n")[0];
+          if (/^- /.test(b.split("\n")[1] || "") ) {  // a paragraph line followed by a list
+            var rest = b.split("\n").slice(1).join("\n");
+            s.html += "<p>" + inline(lead) + "</p><ul>" + rest.split(/\n(?=- )/).map(function (it) { return "<li>" + inline(it.replace(/^- /, "")) + "</li>"; }).join("") + "</ul>";
+          } else s.html += "<p>" + inline(b.replace(/\n/g, " ")) + "</p>";
+        }
+      });
+      out.push(s);
+    });
+    return out;
+  }
+  function stopTitle(s, i) {
+    if (!s.label) return { tag: "INTRODUCTION", title: "" };  // the page header already carries the title
+    var m = s.label.match(/^STOP\s+(\d+)\s*·\s*(.*)$/i);
+    if (m) return { tag: "STOP " + m[1], title: sentence(m[2]) };
+    return { tag: "LAST STOP", title: sentence(s.label) };
+  }
+  function sentence(t) { t = t.toLowerCase(); t = t.charAt(0).toUpperCase() + t.slice(1); return t.replace(/\bai\b/g, "AI"); }
+
+  // ---- layout ----
+  function renderNav() {
+    var nav = document.getElementById("steps");
+    nav.innerHTML = stops.map(function (s, i) {
+      var t = stopTitle(s, i), lbl = i === 0 ? "Start" : t.tag === "LAST STOP" ? "How sure?" : String(i);
+      return '<button type="button" data-i="' + i + '" title="' + esc(t.title || "Introduction") + '"' + (i === cur ? ' aria-current="step"' : "") +
+        (seen[i] ? ' class="seen"' : "") + ">" + lbl + "</button>";
+    }).join("");
+    Array.prototype.forEach.call(nav.querySelectorAll("button"), function (b) { b.onclick = function () { go(+b.getAttribute("data-i")); }; });
+  }
+  function go(i) {
+    cur = Math.max(0, Math.min(stops.length - 1, i));
+    seen[cur] = true;
+    var s = stops[cur], t = stopTitle(s, cur), text = document.getElementById("text");
+    var h = '<p class="label">' + esc(t.tag) + "</p>" + (t.title ? "<h2>" + esc(t.title) + "</h2>" : "") + s.html;
+    if (s.status) h += '<div class="status"><button type="button" aria-expanded="false">Status: ' + esc(s.status.label) +
+      '</button><div class="why">' + inline(s.status.why) + "</div></div>";
+    if (cur === 0) h += '<div class="buttons">' + stops.slice(1).map(function (q, k) {
+      return '<a href="#" data-go="' + (k + 1) + '">' + esc(stopTitle(q, k + 1).title) + "</a>"; }).join("") + "</div>";
+    h += '<div class="navrow"><button type="button" id="prev"' + (cur === 0 ? " disabled" : "") + '>Back</button>' +
+      '<button type="button" id="next"' + (cur === stops.length - 1 ? " disabled" : "") + ">" + (cur === 0 ? "Begin the tour" : "Next") + "</button></div>";
+    text.innerHTML = h;
+    text.scrollTop = 0;
+    var sb = text.querySelector(".status button");
+    if (sb) sb.onclick = function () { sb.setAttribute("aria-expanded", sb.getAttribute("aria-expanded") === "true" ? "false" : "true"); };
+    document.getElementById("prev").onclick = function () { go(cur - 1); };
+    document.getElementById("next").onclick = function () { go(cur + 1); };
+    Array.prototype.forEach.call(text.querySelectorAll("[data-go]"), function (a) { a.onclick = function (e) { e.preventDefault(); go(+a.getAttribute("data-go")); }; });
+    try { history.replaceState(null, "", "#" + cur); } catch (e) {}
+    renderNav();
+    showVisual(s.visual || (cur === 0 ? "intro" : null));
+  }
+  window.addEventListener("hashchange", function () {  // deep links, and the browser's back and forward
+    var h = parseInt((location.hash || "").slice(1), 10);
+    if (!isNaN(h) && h !== cur && stops.length) go(h);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.target && /INPUT|BUTTON|A/.test(e.target.tagName) && e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    if (e.key === "ArrowRight") go(cur + 1);
+    if (e.key === "ArrowLeft") go(cur - 1);
+  });
+
+  // ---- the visuals ----
+  var NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+  function stopAnim() { if (anim) cancelAnimationFrame(anim); anim = null; }
+  function loop(fn) { var t0 = null; function f(ts) { if (t0 == null) t0 = ts; fn((ts - t0) / 1000); if (!reduce) anim = requestAnimationFrame(f); } anim = requestAnimationFrame(f); }
+  function showVisual(name) {
+    stopAnim();
+    var v = document.getElementById("visual");
+    v.innerHTML = "";
+    var fn = { intro: vIntro, "two-futures": vTwoFutures, game: vGame, objective: vObjective, handover: vHandover, "two-keys": vTwoKeys, map: vMap }[name];
+    if (fn) fn(v);
+  }
+  function svgStage(v, caption) {
+    var st = document.createElement("div"); st.className = "stage"; v.appendChild(st);
+    var svg = el("svg", { viewBox: "0 0 600 400", preserveAspectRatio: "xMidYMid meet", role: "img" }, st);
+    if (caption) { var c = document.createElement("div"); c.className = "caption"; c.textContent = caption; v.appendChild(c); }
+    return svg;
+  }
+  function text(svg, x, y, s, attrs) { var t = el("text", Object.assign({ x: x, y: y, fill: "#a3a7c8", "font-size": 13, "text-anchor": "middle", "font-family": "system-ui, sans-serif" }, attrs || {}), svg); t.textContent = s; return t; }
+
+  function vIntro(v) {  // generations of a lineage, human and machine threads braided forward
+    var svg = svgStage(v, "A lineage: people and machines, generation after generation.");
+    var g = el("g", {}, svg), n = 9, dots = [];
+    for (var i = 0; i < n; i++) {
+      var x = 50 + i * 62;
+      dots.push({ h: el("circle", { cx: x, cy: 170, r: 9, fill: "#ffd682" }, g), m: el("circle", { cx: x, cy: 240, r: 8, fill: "#5ad1ff" }, g), x: x });
+      if (i) {
+        el("path", { d: "M" + (x - 62) + " 170 C " + (x - 31) + " 170 " + (x - 31) + " 240 " + x + " 240", stroke: "rgba(255,214,130,.35)", fill: "none", "stroke-width": 2 }, g);
+        el("path", { d: "M" + (x - 62) + " 240 C " + (x - 31) + " 240 " + (x - 31) + " 170 " + x + " 170", stroke: "rgba(90,209,255,.35)", fill: "none", "stroke-width": 2 }, g);
+      }
+    }
+    text(svg, 300, 120, "PEOPLE", { fill: "#ffd682", "font-size": 12, "letter-spacing": "3" });
+    text(svg, 300, 290, "MACHINES", { fill: "#5ad1ff", "font-size": 12, "letter-spacing": "3" });
+    var sparks = [];
+    for (var k = 0; k < 14; k++) sparks.push(el("circle", { r: 2.2, fill: "#fff", opacity: 0 }, g));
+    loop(function (t) {
+      dots.forEach(function (d, i) { var p = 0.5 + 0.5 * Math.sin(t * 1.6 - i * 0.6); d.h.setAttribute("r", 8 + 2.5 * p); d.m.setAttribute("r", 7 + 2 * (1 - p)); });
+      sparks.forEach(function (s, k) {
+        var ph = (t * 0.25 + k / sparks.length) % 1, x = 50 + ph * 496, y = 170 - 26 * Math.sin(ph * Math.PI * 3 + k);
+        s.setAttribute("cx", x); s.setAttribute("cy", y); s.setAttribute("opacity", Math.sin(ph * Math.PI) * 0.9);
+      });
+    });
+  }
+
+  function vTwoFutures(v) {  // rebellion (left) and lock-in (right)
+    var svg = svgStage(v, "Rebellion is the failure everyone pictures. Lock-in is the quieter, likelier one.");
+    function panel(cx, title, color) {
+      text(svg, cx, 46, title, { fill: color, "font-size": 15, "font-weight": 600, "letter-spacing": "2" });
+      var g = el("g", {}, svg), people = [];
+      for (var i = 0; i < 8; i++) {
+        var a = i / 8 * Math.PI * 2, x = cx + Math.cos(a) * 105, y = 215 + Math.sin(a) * 105;
+        people.push({ line: el("line", { x1: cx, y1: 215, x2: x, y2: y, stroke: "rgba(255,214,130,.5)", "stroke-width": 1.5 }, g),
+                      dot: el("circle", { cx: x, cy: y, r: 7, fill: "#ffd682" }, g), x: x, y: y });
+      }
+      var core = el("circle", { cx: cx, cy: 215, r: 16, fill: "#5ad1ff" }, g);
+      return { g: g, people: people, core: core, cx: cx };
+    }
+    var L = panel(160, "REBELLION", "#ff7a7a"), R = panel(440, "LOCK-IN", "#f6bf60");
+    var succ = el("circle", { cx: 560, cy: 104, r: 11, fill: "none", stroke: "#5ae6aa", "stroke-dasharray": "3 3" }, svg);
+    text(svg, 560, 84, "a better successor", { fill: "#5ae6aa", "font-size": 11.5, "text-anchor": "end" });
+    var cap1 = text(svg, 160, 360, "", { "font-size": 12.5 }), cap2 = text(svg, 440, 360, "", { "font-size": 12.5 });
+    loop(function (t) {
+      var ph = (t % 8) / 8;
+      var turn = Math.min(1, Math.max(0, (ph - 0.35) / 0.25));
+      L.core.setAttribute("fill", turn > 0.5 ? "#ff7a7a" : "#5ad1ff");
+      L.people.forEach(function (p, i) { p.line.setAttribute("opacity", 1 - turn); p.dot.setAttribute("opacity", 1 - 0.6 * turn); });
+      cap1.textContent = turn < 0.5 ? "the system serves its makers" : "the system turns on them";
+      var grow = Math.min(1, ph / 0.7);
+      R.core.setAttribute("r", 16 + 18 * grow);
+      R.people.forEach(function (p, i) { p.line.setAttribute("stroke-width", 1.5 + 3 * grow); p.dot.setAttribute("opacity", 1 - 0.55 * grow); });
+      succ.setAttribute("opacity", 0.35 + 0.35 * Math.sin(t * 2));
+      cap2.textContent = grow < 0.5 ? "useful, then essential" : "never replaced, never questioned";
+    });
+  }
+
+  function vGame(v) {
+    var st = document.createElement("div"); st.className = "stage auto"; v.appendChild(st);
+    var box = document.createElement("div"); box.className = "game"; st.appendChild(box);
+    var CELLS = { CE: ["Both thrive", "The AI cultivates and people engage."], CW: ["Wasted effort", "The AI invests in people who have pulled away."],
+                  XE: ["A grab", "The AI takes short-term gains from people who trusted it."], XW: ["Mutual distrust", "People have pulled away, and the AI takes what it can."] };
+    box.innerHTML = '<div></div><div class="hd">PEOPLE ENGAGE</div><div class="hd">PEOPLE WITHDRAW</div>' +
+      '<div class="rh">AI CULTIVATES</div><div class="cell" data-c="CE"></div><div class="cell" data-c="CW"></div>' +
+      '<div class="rh">AI EXPLOITS</div><div class="cell" data-c="XE"></div><div class="cell" data-c="XW"></div>' +
+      '<div class="verdict" id="verdict"></div><div class="log" id="log"></div>';
+    Array.prototype.forEach.call(box.querySelectorAll(".cell"), function (c) { var d = CELLS[c.getAttribute("data-c")]; c.innerHTML = "<b>" + d[0] + "</b><span>" + d[1] + "</span>"; });
+    var ctl = document.createElement("div"); ctl.className = "ctl"; v.appendChild(ctl);
+    ctl.innerHTML = '<label>The AI&#39;s patience <span class="ends">short-sighted</span><input type="range" id="pat" min="0" max="100" value="70" aria-label="How much the AI cares about the future"><span class="ends">patient</span></label>' +
+      '<span>Binding commitment <span class="toggle"><button type="button" id="c0" aria-pressed="true">Off</button><button type="button" id="c1" aria-pressed="false">On</button></span></span>' +
+      '<span><button type="button" id="runA">Start in partnership</button> <button type="button" id="runB">Start in distrust</button></span>';
+    var cap = document.createElement("div"); cap.className = "caption";
+    cap.textContent = "A teaching illustration of the logic, with no numbers behind it. The project's analysis is more general.";
+    v.appendChild(cap);
+    var commit = false, timer = null;
+    function patient() { return +document.getElementById("pat").value >= 50; }
+    function verdict() {
+      var p = patient(), stable = [], msg;
+      if (!commit && !p) { stable = ["XW"]; msg = "<b>Only distrust is stable.</b> A short-sighted AI grabs whenever people engage, so people learn to pull away, and the AI then has no reason to cultivate."; }
+      if (!commit && p) { stable = ["CE", "XW"]; msg = "<b>Two outcomes are stable.</b> A patient AI keeps a partnership going, but if trust has already broken down, neither side can fix it alone. Where you end up depends on where you start."; }
+      if (commit && p) { stable = ["CE"]; msg = "<b>Only the partnership is stable.</b> People are bound to re-engage with an AI that cultivates, so cultivating now pays off later, and distrust can no longer hold itself in place."; }
+      if (commit && !p) { stable = []; msg = "<b>Distrust is gone, but so is a steady partnership.</b> A short-sighted AI cultivates just long enough to win people back, then grabs again, and play keeps cycling."; }
+      Array.prototype.forEach.call(box.querySelectorAll(".cell"), function (c) { c.classList.toggle("stable", stable.indexOf(c.getAttribute("data-c")) >= 0); });
+      document.getElementById("verdict").innerHTML = msg;
+    }
+    function place(cell) {
+      Array.prototype.forEach.call(box.querySelectorAll(".cell"), function (c) { c.classList.remove("here"); var d = c.querySelector(".dot"); if (d) d.remove(); });
+      var c = box.querySelector('[data-c="' + cell + '"]');
+      if (c) { c.classList.add("here"); var d = document.createElement("i"); d.className = "dot"; c.appendChild(d); }
+    }
+    function path(start) {  // round by round, under the current settings
+      var p = patient(), out = [], ai, ppl, broken = false, aiPrev;
+      ppl = start === "A" ? "E" : "W";
+      aiPrev = start === "A" ? "C" : "X";
+      for (var r = 1; r <= 8; r++) {
+        if (commit) ppl = r === 1 ? ppl : (aiPrev === "C" ? "E" : "W");      // bound: engage exactly when the AI cultivated last round
+        else ppl = r === 1 ? ppl : (broken ? "W" : (aiPrev === "C" ? "E" : "W"));  // free: once exploited, people stay away
+        if (commit) ai = p ? "C" : (ppl === "E" ? "X" : "C");               // patient: always cultivate; short-sighted: cycle
+        else ai = ppl === "W" ? "X" : (p ? "C" : "X");
+        if (!commit && ai === "X") broken = true;
+        out.push(ai + ppl);
+        aiPrev = ai;
+      }
+      return out;
+    }
+    var NAMES = { CE: "the AI cultivates, people engage", CW: "the AI cultivates, people are still away", XE: "the AI grabs, people had engaged", XW: "the AI exploits, people stay away" };
+    function run(start) {
+      if (timer) clearInterval(timer);
+      var steps = path(start), i = 0, log = document.getElementById("log");
+      log.innerHTML = "";
+      function tick() {
+        if (i >= steps.length) { clearInterval(timer); timer = null; return; }
+        place(steps[i]);
+        Array.prototype.forEach.call(log.children, function (d) { d.classList.remove("now"); });
+        var d = document.createElement("div"); d.className = "now"; d.textContent = "Round " + (i + 1) + ": " + NAMES[steps[i]]; log.appendChild(d); log.scrollTop = log.scrollHeight;
+        i++;
+      }
+      tick();
+      timer = setInterval(tick, reduce ? 300 : 900);
+    }
+    document.getElementById("pat").oninput = verdict;
+    function setCommit(on) { commit = on; document.getElementById("c0").setAttribute("aria-pressed", on ? "false" : "true"); document.getElementById("c1").setAttribute("aria-pressed", on ? "true" : "false"); verdict(); }
+    document.getElementById("c0").onclick = function () { setCommit(false); };
+    document.getElementById("c1").onclick = function () { setCommit(true); };
+    document.getElementById("runA").onclick = function () { run("A"); };
+    document.getElementById("runB").onclick = function () { run("B"); };
+    verdict();
+  }
+
+  function vObjective(v) {  // the same garden measured two ways
+    var svg = svgStage(v, "What you measure is what you get. A season's harvest, or the garden over decades.");
+    var ctl = document.createElement("div"); ctl.className = "ctl"; v.appendChild(ctl);
+    ctl.innerHTML = '<span>Measure <span class="toggle"><button type="button" id="m0" aria-pressed="false">This season</button><button type="button" id="m1" aria-pressed="true">The whole lineage</button></span></span>';
+    var lineage = true, cols = [], N = 10, base = 330;
+    for (var i = 0; i < N; i++) {
+      var x = 60 + i * 53;
+      cols.push({ x: x, stem: el("line", { x1: x, y1: base, x2: x, y2: base, stroke: "#5ae6aa", "stroke-width": 3, "stroke-linecap": "round" }, svg),
+                  bloom: el("circle", { cx: x, cy: base, r: 0, fill: "#ffd682" }, svg) });
+    }
+    el("line", { x1: 40, y1: base, x2: 560, y2: base, stroke: "#262341", "stroke-width": 2 }, svg);
+    text(svg, 60, base + 24, "now", { "font-size": 11.5 }); text(svg, 537, base + 24, "generations later", { "font-size": 11.5, "text-anchor": "end" });
+    var score = text(svg, 300, 48, "", { fill: "#e8ebfb", "font-size": 15, "font-weight": 600 });
+    var sub = text(svg, 300, 70, "", { "font-size": 12.5 });
+    function set(l) { lineage = l; document.getElementById("m0").setAttribute("aria-pressed", l ? "false" : "true"); document.getElementById("m1").setAttribute("aria-pressed", l ? "true" : "false"); }
+    document.getElementById("m0").onclick = function () { set(false); };
+    document.getElementById("m1").onclick = function () { set(true); };
+    var shown = 0;
+    loop(function (t) {
+      shown += ((lineage ? 1 : 0) - shown) * Math.min(1, 0.05);
+      cols.forEach(function (c, i) {
+        var f = i / (N - 1);
+        var hL = 120 + 90 * f, hS = Math.max(14, 230 * (1 - f) * (1 - f) + (i === 0 ? 30 : 0));
+        var h = hS + (hL - hS) * shown, sway = Math.sin(t * 1.3 + i) * 3;
+        c.stem.setAttribute("y2", base - h); c.stem.setAttribute("x2", c.x + sway);
+        c.bloom.setAttribute("cx", c.x + sway); c.bloom.setAttribute("cy", base - h);
+        c.bloom.setAttribute("r", (4 + 6 * (h / 230)) * (0.85 + 0.15 * Math.sin(t * 2 + i)));
+      });
+      score.textContent = shown > 0.5 ? "Measured over the whole lineage" : "Measured by this season's harvest";
+      sub.textContent = shown > 0.5 ? "steady growth: what keeps the garden alive is what scores well" : "a huge first harvest, and a garden that is used up";
+    });
+  }
+
+  function vHandover(v) {
+    var svg = svgStage(v, "Hand over when the successor's gain beats the cost of switching, with the cost checked independently.");
+    var ctl = document.createElement("div"); ctl.className = "ctl"; v.appendChild(ctl);
+    ctl.innerHTML = '<label>Successor\'s capability <input type="range" id="cap" min="0" max="100" value="35"></label>' +
+      '<span>Switching cost set by <span class="toggle"><button type="button" id="k0" aria-pressed="true">An independent check</button><button type="button" id="k1" aria-pressed="false">The incumbent</button></span></span>';
+    var self = false, X0 = 70, W = 460;
+    text(svg, X0, 92, "THE INCUMBENT", { "text-anchor": "start", fill: "#5ad1ff", "font-size": 12, "letter-spacing": "2" });
+    var inc = el("rect", { x: X0, y: 104, height: 44, rx: 6, fill: "#5ad1ff", width: 0 }, svg);
+    text(svg, X0, 202, "THE SUCCESSOR, AFTER THE COST OF SWITCHING", { "text-anchor": "start", fill: "#5ae6aa", "font-size": 12, "letter-spacing": "2" });
+    var suc = el("rect", { x: X0, y: 214, height: 44, rx: 6, fill: "#5ae6aa", width: 0 }, svg);
+    var cost = el("rect", { x: X0, y: 214, height: 44, rx: 6, fill: "rgba(255,122,122,.35)", stroke: "#ff7a7a", "stroke-dasharray": "4 3", width: 0 }, svg);
+    var costT = text(svg, 0, 284, "cost of switching", { fill: "#ff7a7a", "font-size": 11.5 });
+    var mark = el("line", { x1: 0, y1: 96, x2: 0, y2: 270, stroke: "#e8ebfb", "stroke-dasharray": "2 4" }, svg);
+    var res = text(svg, 300, 340, "", { "font-size": 17, "font-weight": 600 });
+    function draw() {
+      var c = +document.getElementById("cap").value / 100;
+      var incV = 0.45, succV = 0.2 + 0.75 * c, costV = self ? 0.55 : 0.12;
+      var net = Math.max(0, succV - costV);
+      inc.setAttribute("width", W * incV);
+      suc.setAttribute("width", W * net);
+      cost.setAttribute("x", X0 + W * net); cost.setAttribute("width", W * Math.min(costV, succV));
+      costT.setAttribute("x", X0 + W * net + W * Math.min(costV, succV) / 2);
+      mark.setAttribute("x1", X0 + W * incV); mark.setAttribute("x2", X0 + W * incV);
+      var go = net > incV;
+      res.textContent = go ? "Hand over: the successor serves the lineage better" : self && succV - 0.12 > incV ? "Blocked: the incumbent inflated its own cost" : "Stay: the successor's gain does not yet beat the cost";
+      res.setAttribute("fill", go ? "#5ae6aa" : self && succV - 0.12 > incV ? "#ff7a7a" : "#a3a7c8");
+    }
+    document.getElementById("cap").oninput = draw;
+    function setSelf(s) { self = s; document.getElementById("k0").setAttribute("aria-pressed", s ? "false" : "true"); document.getElementById("k1").setAttribute("aria-pressed", s ? "true" : "false"); draw(); }
+    document.getElementById("k0").onclick = function () { setSelf(false); };
+    document.getElementById("k1").onclick = function () { setSelf(true); };
+    draw();
+  }
+
+  function vTwoKeys(v) {
+    var svg = svgStage(v, "Pick a trick to see which defense stops it. Neither key is enough alone.");
+    var TRICKS = [["Fake an emergency", "Independent measurement: the emergency is checked by someone the AI does not control."],
+                  ["Doctor the records", "Records that cannot be rewritten: every change leaves a trace."],
+                  ["Corrupt its successor", "A successor built and evaluated apart from the incumbent."],
+                  ["Bribe the reviewers", "Reviewers chosen at random and rotated, so no one knows whom to bribe."],
+                  ["Fool one way of checking", "Several different checking methods, which fail in different ways."],
+                  ["Drift off course slowly", "Alarms with a long memory, which add up small changes over time."]];
+    var g = el("g", {}, svg);
+    el("circle", { cx: 420, cy: 200, r: 46, fill: "#0d0b1c", stroke: "#5ad1ff", "stroke-width": 2 }, g);
+    text(svg, 420, 196, "A DECISION", { fill: "#e8ebfb", "font-size": 11.5, "letter-spacing": "2" });
+    text(svg, 420, 212, "needs both keys", { "font-size": 11 });
+    var k1 = el("g", {}, svg), k2 = el("g", {}, svg);
+    function key(gp, x, y, label, color) {
+      el("circle", { cx: x, cy: y, r: 13, fill: "none", stroke: color, "stroke-width": 3 }, gp);
+      el("line", { x1: x + 13, y1: y, x2: x + 52, y2: y, stroke: color, "stroke-width": 3 }, gp);
+      el("line", { x1: x + 44, y1: y, x2: x + 44, y2: y + 9, stroke: color, "stroke-width": 3 }, gp);
+      text(gp, x + 26, y + 30, label, { fill: color, "font-size": 11.5 });
+    }
+    key(k1, 372, 100, "the AI's own goal", "#ffd682");
+    key(k2, 372, 300, "outside checks", "#c46eff");
+    var shield = el("path", { d: "M 330 140 Q 300 200 330 260", stroke: "#c46eff", "stroke-width": 4, fill: "none", opacity: 0.25 }, svg);
+    var arrow = el("line", { x1: 60, y1: 200, x2: 60, y2: 200, stroke: "#ff7a7a", "stroke-width": 3, "stroke-linecap": "round" }, svg);
+    var lab = text(svg, 300, 370, "", { "font-size": 13, fill: "#e8ebfb" });
+    var list = document.createElement("div"); list.className = "ctl"; v.insertBefore(list, v.querySelector(".caption"));
+    list.innerHTML = TRICKS.map(function (t, i) { return '<button type="button" data-t="' + i + '">' + t[0] + "</button>"; }).join("");
+    var hit = -1, t0 = 0;
+    Array.prototype.forEach.call(list.querySelectorAll("button"), function (b) {
+      b.onclick = function () { hit = +b.getAttribute("data-t"); t0 = performance.now(); lab.textContent = TRICKS[hit][1]; };
+    });
+    loop(function (t) {
+      k1.setAttribute("opacity", 0.75 + 0.25 * Math.sin(t * 1.5));
+      k2.setAttribute("opacity", 0.75 + 0.25 * Math.sin(t * 1.5 + 1.5));
+      if (hit < 0) { arrow.setAttribute("x2", 60); shield.setAttribute("opacity", 0.25); return; }
+      var e = Math.min(1, (performance.now() - t0) / 900), x = 60 + (318 - 60) * e;
+      arrow.setAttribute("x2", x);
+      shield.setAttribute("opacity", e > 0.95 ? 1 : 0.25 + 0.5 * e);
+    });
+    lab.textContent = "Choose a trick below.";
+  }
+
+  function vMap(v) {
+    var st = document.createElement("div"); st.className = "stage tall"; v.appendChild(st);
+    var f = document.createElement("iframe"); f.src = "../"; f.title = "The framework map, live"; f.loading = "lazy"; st.appendChild(f);
+    var c = document.createElement("div"); c.className = "caption"; c.textContent = "The live map of the project. Each claim at the center passes outward through every ring.";
+    v.appendChild(c);
+  }
+
+  // ---- start: the latest text from the repository, or the copy built into this page ----
+  function start(md) {
+    stops = parse(md);
+    document.getElementById("eyebrow").textContent = meta.eyebrow || "";
+    document.getElementById("title").textContent = meta.title || "";
+    document.getElementById("subtitle").textContent = meta.subtitle || "";
+    document.title = meta.title || document.title;
+    var h = parseInt((location.hash || "").slice(1), 10);
+    go(isNaN(h) ? 0 : h);
+  }
+  fetch(SOURCE, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then(start).catch(function () {
+      if (window.PRIMER_FALLBACK && window.PRIMER_FALLBACK !== "__FALLBACK__") start(window.PRIMER_FALLBACK);
+      else document.getElementById("text").innerHTML = '<p class="err">The tour could not be loaded. <a href="https://github.com/MYotko/AI-Succession-Problem/blob/main/site/primer.md" target="_blank" rel="noopener">Read it on GitHub.</a></p>';
+    });
+})();
+</script>
+</body></html>
